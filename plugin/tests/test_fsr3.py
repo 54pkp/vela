@@ -50,7 +50,7 @@ class Fsr3(unittest.TestCase):
         s = sgsr3.Sgsr3(assets, os.path.join(TMP, "home"), os.path.join(TMP, "settings"), log=lambda *_: None)
         s.version = {"fsr3_live": True}
         self.assertFalse(s.fsr3_available())  # no FidelityFX DLL in assets
-        with open(os.path.join(assets, sgsr3.FG_DLL), "wb") as f:
+        with open(os.path.join(assets, sgsr3.FFX_DLL), "wb") as f:
             f.write(b"MZ")
         self.assertTrue(s.fsr3_available())
         s.version = {}

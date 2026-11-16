@@ -16,11 +16,11 @@ Licence: GPL-3.0-only (see [`../LICENSING.md`](../LICENSING.md)); nothing from Q
 
 | file | what it is |
 |---|---|
-| `vela_npu_layer.cpp` | the layer (layer build 11: `VL_BUILD`, and `implementation_version` in the manifest) |
+| `vela_npu_layer.cpp` | the layer (layer build 12: `VL_BUILD`, and `implementation_version` in the manifest) |
 | `vela_npu_abi.h`, `vela_npu_ext.h` | the contract with the provider: the 256-byte command/ack marker recorded with `vkCmdUpdateBuffer`, and its extensions (tensors, async, zero-copy, graph choice, ping-pong) |
 | `vela_npu_wait.comp`, `vela_npu_wait_spv.h` | the shader of the bounded GPU wait and its SPIR-V as a C array |
 | `vela_npu.map` | linker version script: exports only the layer entry points |
-| `VkLayer_VELA_npu.json` | the layer manifest (`implementation_version` 11) |
+| `VkLayer_VELA_npu.json` | the layer manifest (`implementation_version` 12) |
 | `build.sh` | the build |
 | `wl_app.c` | on-device test app: plays the provider's side of the contract against the real layer and a daemon |
 
@@ -54,8 +54,8 @@ A newer Ubuntu package set can give different machine code.
 
 ## How the shipped binary relates to this source
 
-The release zip (`upscale/assets/npu/libVkLayer_VELA_npu.so`) carries the layer build 11, built from this folder with the
-toolchain and the command above: md5 `2f438a25a73197d8eacb5b5422416286`, 4,143,056 bytes (manifest `VkLayer_VELA_npu.json` md5 `82231f80d6c34e09c492fcf8ca2b8f44`).
+The release zip (`upscale/assets/npu/libVkLayer_VELA_npu.so`) carries the layer build 12, built from this folder with the
+toolchain and the command above: md5 `fe623ee91b56a5760913341a790682bd`, 1,718,304 bytes (manifest `VkLayer_VELA_npu.json` md5 `bcef6f72435690cea040b5667354bebc`).
 Building again gives the same file byte for byte. The repository holds no binary of the layer: the shipped one is in the
 release zip.
 

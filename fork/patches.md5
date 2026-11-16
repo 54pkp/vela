@@ -18,3 +18,8 @@ f4cfa485c547367be82602020ebcceb7 *0017-vela-fsr4-depth-flip-heaps-sgsr2-fallback
 02ab8bff21d9d34a9c439e6cae2afc48 *0019-vela-fsr4-mv-pass.patch
 1af1cc31f215ade51fb2e4f9eaa3a3ce *0020-vela-gpu-identify-no-deadlock.patch
 b3654ff68ec1fc1d16b436c3a6b45f3b *0021-vela-output-pack-rgb9e5.patch
+39f32bbd909eb90e96806d83070edf33 *0023-vela-no-depth-context.patch
+0d1424c23841d49eb87646f045e9626a *0024-vela-dlss-no-depth.patch
+8b5eff646d967696f7f8413504f112eb *0024b-vela-nodepth-spatial.patch
+e2efed6b09574cdf97bf8cf185e1a38b *0024c-vela-nodepth-tonemap.patch
+8be4cefba5ce987cc161d53c48f73d44 *0024d-vela-tonemap-vkd3d.patch

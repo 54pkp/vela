@@ -6,3 +6,9 @@ assets/layer/*.so
 assets/staticfsr/*.dll
 assets/npu/*.so
 preview/out/
+
+# 0.8.22: FSR 4 for any game, built binaries (PTC: layer r8, provider pv1); the pack is a separate download
+assets/anyfsr4/*.so
+assets/anyfsr4/pack/
+# PL10: AMD fg10 library + data (NPK2 plugin_fg10_md5.txt), put in the zip by pack.py
+assets/anyfsr4/fg10/

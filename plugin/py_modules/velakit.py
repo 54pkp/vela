@@ -90,7 +90,7 @@ def probe_game(exe_dir, work, scratch, run=subprocess.run, bwrap=None):
         argv = vela_launch.bwrap_argv(exe_dir, scratch, work, bwrap or "bwrap")
     except (OSError, RuntimeError) as e:
         return False, str(e)
-    return vela_launch.probe(argv, run)
+    return vela_launch.probe(argv, run, env=vela_launch.clean_env())  # V11: without Decky's own library path
 
 
 def tidy_work(work):

@@ -4,7 +4,7 @@
 
 The fork is a derivative of OptiScaler (GPL-3.0, the `LICENSE` of optiscaler/OptiScaler and of justradical/Sloptiscaler)
 and is licensed under GPL-3.0. It is published as patches on Sloptiscaler `f80e4da3` plus build steps (`fork/README.md`);
-the full licence text is in `fork/LICENSE`. The shipped `OptiScaler.dll` (md5 `48a888ee9ccb654f527d368fcf2623c3`) is built
+the full licence text is in `fork/LICENSE`. The shipped `OptiScaler.dll` (md5 `cc76b47269c20214a665c4a618d8a4ff`) is built
 from these patches.
 
 ## The plugin, the RE4 interceptor and the NPU layer: GPL-3.0-only

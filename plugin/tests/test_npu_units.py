@@ -73,6 +73,10 @@ for o in ("1920x1080", "1600x900", "1280x720", "1600x904", "960x540", "1366x768"
 for state in ("activating", "inactive"):
     sv, _ = service([], FILES_14, {"vela-npu.service": state})
     assert sv["unit_state"] == state and both(sv, "1920x1080") == ("npu_service", "npu_service"), state
+# systemctl gave no answer at all (no manager reachable, no tool: PC bench, bench/in_systemd.py): said as such, never "not running"
+sv2 = npu.Npu("/x", "/x", "/x", log=lambda *_: None, systemctl=lambda u: None)
+assert sv2._unit_state(True) == npu.UNIT_UNKNOWN == "unknown"
+assert presets.hint({"kind": "fsr4", "model": "fsr4", "npu": True}, {"npu": {"layer_found": True, "service": {"installed": True, "qnn": True, "unit_state": "unknown"}}})["id"] == "npu_unknown"
 # no Qualcomm runtime: the installer again, even with a failed unit
 sv, _ = service([], [f for f in FILES_14 if f != npu.QNN_LIB], {"vela-npu.service": "failed"})
 assert hint(sv, "1920x1080") == "npu_qnn", sv

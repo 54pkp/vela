@@ -5,8 +5,8 @@ instead. What is installed into the exe folder:
   dxgi.dll                             our OptiScaler build (assets/sgsr3/OptiScaler.dll)
   OptiScaler.ini                       assets/sgsr3/OptiScaler.ini with the keys from ini_values()
   OptiScaler/plugins/OptiPatcher.asi   opens the DLSS input of UE games on a non-NVIDIA GPU without spoofing
-  amd_fidelityfx_dx12.dll              only with frame generation: FidelityFX SDK 1.1.4 (MIT), whose swapchain shows
-                                       the frames SGSR-FG generates (OptiScaler's FGOutput=fsrfg)
+  amd_fidelityfx_dx12.dll              FidelityFX SDK 1.1.4 (MIT): FSR 3.1 (live model "fsr3"), only when the game has none
+                                       of its own (V10). NOFG (2026-11-15): no longer for frame generation (SGSR-FG is out)
 Everything that was there before is copied to <exe dir>/.upscale-sgsr3/backup first; state.json there lists what
 existed, so disable() puts the old files back and removes the ones that were not there. OptiScaler.log written
 while SGSR 3 was on is moved to the plugin's settings folder.
@@ -16,8 +16,8 @@ Low latency (the game's Reflex -> fakenvapi -> LatencyFleX, all inside our OptiS
 ini keys; UE4's r.OneFrameThreadLag=0 is latency.py's.
 
 Wine only loads a dxgi.dll from the game folder with WINEDLLOVERRIDES=dxgi=n,b; the algorithm (v1f is the DLL's
-default, OPTI_SGSR3_V1CS=1 = v1, OPTI_SGSR3_STUDENT=1 = the student) and SGSR-FG (OPTI_SGSRFG=1) are environment
-variables. All go into the game's Steam launch options. The frontend reads and writes those (SteamClient), this
+default, OPTI_SGSR3_V1CS=1 = v1, OPTI_SGSR3_STUDENT=1 = the student) are environment variables (NOFG: SGSR-FG's
+OPTI_SGSRFG=1 is never written again; an older Vela's is taken out). All go into the game's Steam launch options. The frontend reads and writes those (SteamClient), this
 module only computes the strings, so it stays testable.
 
 Pure standard library: Decky's frozen Python has no html.parser etc.
@@ -34,6 +34,7 @@ import velakit
 import npu
 import presets
 import profiles
+import dxgi_quirks  # fgtest7: OptiScaler's DisableDxgiSpoofing quirk list (tools/gen_dxgi_quirks.py)
 
 # v1f: SGSR 3 v1 rewritten for fp16 on Vulkan (fork patch 0005) with the HUD locks and the temporal box hp (0007);
 # v1: the D3D12 compute v1 (patch 0003); student: the S4s4 network (0004)
@@ -55,7 +56,8 @@ SMOOTH_ENV_KEYS = ("OPTI_SGSR3_SOFT", "OPTI_SGSR3_FRESH")
 # DISOCC disocclusion from the previous depth (ghosting), QSTOCH stochastic history rounding
 VF_ENV_KEYS = ("OPTI_SGSR3_SQ", "OPTI_SGSR3_FLOOR", "OPTI_SGSR3_NCAP", "OPTI_SGSR3_FRESH", "OPTI_SGSR3_DISOCC",
                "OPTI_SGSR3_QSTOCH")
-# fg: SGSR-FG (experimental, off by default); latency / fps: set by the plugin's "low latency" switch (main.py)
+# NOFG (owner 2026-11-15): no "fg" (SGSR-FG) any more: frame generation is out of Vela; an older Vela's stored "fg" is dropped
+# (clean_opts) and OptiScaler.ini always gets FrameGen / OptiFG off. latency / fps: the 0.8.9 LL cleanup (main.py _llfg_off)
 # mode / model / res: what the panel shows (Vela 0.4.0: Quality / Balanced / Speed, overrides in "advanced section");
 # algo / ratio are what the fork gets, resolved from them by resolve_mode(). "custom": algo / ratio as given (an
 # install of 0.3.x, whose state has no mode, keeps exactly what it had).
@@ -65,7 +67,7 @@ RESES = ["auto"] + RATIOS
 # Vela AI (the student) is the main model since 0.4.0 (Vela SR = v1f is its fallback and the choice of game profiles
 # where it is better): the mode only picks the render size. Student on the console: 1.9 ms a 540p frame.
 MODE_CONFIG = {"quality": ("student", "1.5"), "balance": ("student", "2.0"), "speed": ("student", "2.25")}
-DEFAULT_OPTS = {"algo": "student", "ratio": "2.0", "fg": False, "latency": False, "fps": "off", "smooth": "dlss",
+DEFAULT_OPTS = {"algo": "student", "ratio": "2.0", "latency": False, "fps": "off", "smooth": "dlss",
                 "mode": "balance", "model": "auto", "res": "auto"}
 
 
@@ -81,9 +83,11 @@ def resolve_mode(opts, appid=None):
     return out
 
 STATE_DIR = ".upscale-sgsr3"
-FG_DLL = "amd_fidelityfx_dx12.dll"
+# the FidelityFX SDK DX12 DLL: FSR 3.1 (live "fsr3") and, with AMD's driver library, the FFX backend's FSR 4 (FSR4_READY off).
+# Named FG_DLL until NOFG (it came with SGSR-FG in 0.4.x); frame generation no longer installs it
+FFX_DLL = "amd_fidelityfx_dx12.dll"
 # 0.5.2: FSR 4 as a Vela live model (the fork's FFX backend): AMD's driver FidelityFX library, which the user puts on
-# the console (not in the repository: an AMD driver file); with it and FG_DLL in the game folder OptiScaler finds the
+# the console (not in the repository: an AMD driver file); with it and FFX_DLL in the game folder OptiScaler finds the
 # FSR 4 provider and runs its INT8 model ([FSR] Fsr4ForceModel=2). Off: AMD's driver library gives the Adreno FSR 3.1
 # only, the SDK 4.1.2 upscaler offers 3.1.6 / 2.3.4 (29.10); kept so old installs get their files back
 AMDXC = "amdxcffx64.dll"
@@ -96,17 +100,17 @@ FSR4VK = "amd_fidelityfx_upscaler_vk.dll"
 # amd_fidelityfx_dx12.dll from the exe folder and takes its newest 3.x upscaler (SDK 1.1.4: FSR 3.1.4). The live switch
 # needs the DLL there before the game starts, so with a fork that has 0014 (VERSION.json "fsr3_live") ours goes in
 # whenever the game has none of its own; a game's own copy stays (its FSR 3.1 runs)
-INSTALLED = ["dxgi.dll", "OptiScaler.ini", "OptiScaler/plugins/OptiPatcher.asi", FG_DLL, AMDXC, FSR4VK]
-OPTIONAL = {FG_DLL, AMDXC, FSR4VK}    # only while frame generation / FSR 4 needs them; otherwise what the game had stays
+INSTALLED = ["dxgi.dll", "OptiScaler.ini", "OptiScaler/plugins/OptiPatcher.asi", FFX_DLL, AMDXC, FSR4VK]
+OPTIONAL = {FFX_DLL, AMDXC, FSR4VK}    # only while FSR 3 / FSR 4 needs them; otherwise what the game had stays
 RUNTIME = ["OptiScaler.log"]          # written by OptiScaler while the game runs
-ASSET_OF = {"dxgi.dll": "OptiScaler.dll", "OptiScaler/plugins/OptiPatcher.asi": "OptiPatcher.asi", FG_DLL: FG_DLL}
+ASSET_OF = {"dxgi.dll": "OptiScaler.dll", "OptiScaler/plugins/OptiPatcher.asi": "OptiPatcher.asi", FFX_DLL: FFX_DLL}
 REQUIRED_ASSETS = ("OptiScaler.dll", "OptiScaler.ini", "OptiPatcher.asi")
 # 0.4.7: games whose FSR 2 is built into the exe (Resident Evil 4): our own interceptor instead of OptiScaler
 #, assets/staticfsr/dxgi.dll, no ini; profiles.py "static_fsr2". Its log next to the exe.
 STATIC_ASSETS = "staticfsr"
 # 0.8.3-re: the interceptor runs FSR 4.1 (fsr4vk provider) and FSR 3.1 (FidelityFX SDK DX12 DLL) too, on the
 # panel's live model: both go next to it while the plugin carries them (OPTIONAL: the game's own copy is backed up)
-STATIC_INSTALLED = ["dxgi.dll", FSR4VK, FG_DLL]
+STATIC_INSTALLED = ["dxgi.dll", FSR4VK, FFX_DLL]
 # 0.8.11: interceptor builds earlier plugin versions shipped as assets/staticfsr/dxgi.dll (md5 of every Vela zip and
 # worktree on the dev machine: 0.7.0 8791a3bf, 0.8.3-re c1b336a4, 0.8.4..0.8.10 55096b0c). An install from 0.8.11 on
 # records its own hash in the state (dxgi_md5); this list is for installs made before that
@@ -262,15 +266,16 @@ def static_log_summary(path, since=0.0):
             "fps_model": STATIC_LABEL.get(last_fps.group(3) or "", last_fps.group(3)) if last_fps else None,
             "gpu_ms": float(last_fps.group(4)) if last_fps and last_fps.group(4) else None,
             "jitter": jit, "npu": npu.parse_fork(seg),
-            "hp": False, "lines2": False, "student_fallback": False, "v1f_fallback": False, "fg": None,
+            "hp": False, "lines2": False, "student_fallback": False, "v1f_fallback": False,
             "low_latency": None, "errors": len(re.findall(r"failed|error", text, re.I))}
 
 DLL_OVERRIDE = 'WINEDLLOVERRIDES="dxgi=n,b"'
 STUDENT_ENV = "OPTI_SGSR3_STUDENT=1"
 V1_ENV = "OPTI_SGSR3_V1CS=1"
+# NOFG: SGSR-FG's token (0.4.x .. 0.8.8) and Turnip's preemption flag that came with it (0.4.11 .. 0.4.15): never written, still
+# taken off (OUR_TOKENS) when an older Vela left them in a game's options
 FG_ENV = "OPTI_SGSRFG=1"
-# with Vela FG: Turnip's autotuner optimised for preemption no. 3), only while FG is on
-FG_TU_ENV = "TU_AUTOTUNE_FLAGS=preempt_optimize"  # no longer set (not supported on A740); still taken off
+FG_TU_ENV = "TU_AUTOTUNE_FLAGS=preempt_optimize"
 ALGO_ENV = {"v1f": None, "v1": V1_ENV, "student": STUDENT_ENV}
 OUR_TOKENS = (DLL_OVERRIDE, STUDENT_ENV, V1_ENV, FG_ENV, FG_TU_ENV) + profiles.ENV_TOKENS + profiles.EXTRA_ENV_TOKENS
 DX12_ARG = "-dx12"
@@ -555,7 +560,126 @@ def find_install(home, appid):
         path = os.path.join(lib, "steamapps", "common", inst) if inst else None
         if path and os.path.isdir(path):
             return path, st.get("name") or ""
+    if is_shortcut(appid):
+        root, name, windows = shortcut_install(home, appid)
+        return (root, name) if windows else (None, None)
     return None, None
+
+
+# ---- non-Steam shortcuts (0.8.22) ---------------------------------------------------------------------------------
+# A game added with "Add a Non-Steam Game" (a GOG or itch copy, an exe from a card) has no appmanifest: Steam keeps it in
+# <Steam>/userdata/<user>/config/shortcuts.vdf, binary VDF, with its appid, exe and Start In folder.
+
+def is_shortcut(appid):
+    """A non-Steam shortcut's appid has the top bit set: at least 2^31 (negative when read as a signed number)."""
+    try:
+        n = int(appid)
+    except (TypeError, ValueError):
+        return False
+    return n >= 2 ** 31 or n < 0
+
+
+def parse_binary_vdf(data):
+    """Steam's binary KeyValues (shortcuts.vdf): 0x00 map, 0x01 string, 0x02 int32, 0x07 uint64, 0x08 end. A cut file
+    gives what was read before the cut."""
+    pos = 0
+
+    def cstr():
+        nonlocal pos
+        end = data.index(b"\x00", pos)
+        s = data[pos:end].decode("utf-8", "replace")
+        pos = end + 1
+        return s
+
+    def read_map():
+        nonlocal pos
+        out = {}
+        while pos < len(data):
+            t = data[pos]
+            pos += 1
+            if t == 0x08:
+                return out
+            key = cstr()
+            if t == 0x00:
+                out[key] = read_map()
+            elif t == 0x01:
+                out[key] = cstr()
+            elif t == 0x02:
+                out[key] = int.from_bytes(data[pos:pos + 4], "little", signed=True)
+                pos += 4
+            elif t == 0x07:
+                out[key] = int.from_bytes(data[pos:pos + 8], "little")
+                pos += 8
+            else:
+                raise ValueError(f"binary vdf: type {t} at {pos - 1}")
+        return out
+
+    try:
+        return read_map()
+    except (ValueError, IndexError):
+        return {}
+
+
+def _unquote(s):
+    s = (s or "").strip()
+    return s[1:-1] if len(s) >= 2 and s[0] == s[-1] == '"' else s
+
+
+def shortcuts(home):
+    """Every non-Steam shortcut of every Steam user on the device: [{"appid", "name", "exe", "start_dir"}]."""
+    out, seen = [], set()
+    for root in (os.path.join(home, ".local/share/Steam"), os.path.join(home, ".steam/steam")):
+        try:
+            real = os.path.realpath(root)
+            users = sorted(os.listdir(os.path.join(real, "userdata")))
+        except OSError:
+            continue
+        if real in seen:
+            continue
+        seen.add(real)
+        for user in users:
+            try:
+                with open(os.path.join(real, "userdata", user, "config", "shortcuts.vdf"), "rb") as f:
+                    data = parse_binary_vdf(f.read())
+            except OSError:
+                continue
+            for e in (data.get("shortcuts") or {}).values():
+                if not isinstance(e, dict):
+                    continue
+                low = {k.lower(): v for k, v in e.items()}
+                if not isinstance(low.get("appid"), int):
+                    continue
+                out.append({"appid": str(low["appid"] & 0xFFFFFFFF), "name": str(low.get("appname") or ""),
+                            "exe": _unquote(low.get("exe")), "start_dir": _unquote(low.get("startdir"))})
+    return out
+
+
+def _inside(path, folder):
+    try:
+        return os.path.commonpath([os.path.abspath(path), os.path.abspath(folder)]) == os.path.abspath(folder)
+    except ValueError:
+        return False
+
+
+def shortcut_install(home, appid):
+    """(game folder, name, windows) of a non-Steam shortcut, or (None, None, False) when it is not there (a card taken out).
+    Only a shortcut to a Windows .exe is a game folder to scan: its Start In folder when the exe is inside it, else the
+    exe's folder. A shortcut to anything else (an emulator's AppImage, flatpak, a script; on armadaOS Start In may be the
+    home folder) is a Linux program: its folder is given without a scan, so another game's exe nearby is never taken."""
+    want = str(int(appid) & 0xFFFFFFFF)
+    for sc in shortcuts(home):
+        if sc["appid"] != want:
+            continue
+        exe, start = sc["exe"], sc["start_dir"]
+        exe_dir = os.path.dirname(exe) if exe else ""
+        if not exe.lower().endswith(".exe"):
+            d = exe_dir if exe_dir and os.path.isdir(exe_dir) else start if start and os.path.isdir(start) else None
+            return (d, sc["name"], False) if d else (None, None, False)
+        for d in ((start,) if start and _inside(exe, start) else ()) + (exe_dir,):
+            if d and os.path.isdir(d):
+                return d, sc["name"], True
+        return None, None, False
+    return None, None, False
 
 
 # ---- game folder ----------------------------------------------------------------------------------------------
@@ -644,7 +768,6 @@ def pick_exe(exes, unity_dirs):
 
 def ini_values(opts):
     """Keys we set in the template; the rest stays at OptiScaler's defaults ("auto")."""
-    fg = bool(opts.get("fg"))
     lowlat = bool(opts.get("latency"))
     fps = opts.get("fps", "off")
     vals = {
@@ -661,18 +784,17 @@ def ini_values(opts):
         ("Log", "LogLevel"): "2",
         ("UpscaleRatio", "UpscaleRatioOverrideEnabled"): "false",
         ("UpscaleRatio", "UpscaleRatioOverrideValue"): "auto",
-        # OptiScaler's overlay stays (it carries FG), its menu, FPS overlay and FG hotkeys and the splash do not
+        # OptiScaler's overlay stays, its menu, FPS overlay and FG hotkeys and the splash do not
         ("Menu", "ShortcutKey"): "-1",
         ("Menu", "FpsShortcutKey"): "-1",
         ("Menu", "FpsCycleShortcutKey"): "-1",
         ("Menu", "FGShortcutKey"): "-1",
         ("Menu", "DisableSplash"): "true",
-        # frame generation: our SGSR-FG on the upscaler's inputs, shown through FidelityFX's swapchain, HUD-less
-        # frame found by HUDfix
-        ("FrameGen", "Enabled"): "true" if fg else "false",
-        ("FrameGen", "FGInput"): "upscaler" if fg else "auto",
-        ("FrameGen", "FGOutput"): "fsrfg" if fg else "auto",
-        ("OptiFG", "HUDFix"): "true" if fg else "auto",
+        # NOFG (owner 2026-11-15): no frame generation, whatever an older Vela stored: OptiScaler's own FG and SGSR-FG off
+        ("FrameGen", "Enabled"): "false",
+        ("FrameGen", "FGInput"): "auto",
+        ("FrameGen", "FGOutput"): "auto",
+        ("OptiFG", "HUDFix"): "auto",
         # every input the game may offer goes to SGSR 3: whatever the player picks in the game's menu (DLSS, FSR 2,
         # FSR 3 / FidelityFX API, XeSS) is replaced. FSR built into the exe (no ffx_* DLL) needs OptiScaler's pattern
         # search (slower game start), so only when the folder has no FSR DLL
@@ -696,7 +818,12 @@ def ini_values(opts):
     # 0.8.15: no UpscaleRatioOverride whatever the stored
     # ratio: the game's own DLSS / FSR quality preset sets the render. LogLevel stays 2 (Info: the fork's Vela lines are [I];
     # Debug wrote ~23k lines in 90 s in Bright Memory when another plugin's ini was in the folder)
-    # per-game OptiScaler keys (profiles.py "ini"), e.g. Cyberpunk's Dxgi=false
+    # fgtest7 (report 9NPQFQ): games whose OptiScaler quirk turns DXGI spoofing off (Quirks.h DisableDxgiSpoofing, mirrored in
+    # dxgi_quirks.py) get Dxgi=false, the value the quirk sets: our Dxgi=true would cancel it (dllmain: the quirk applies only
+    # when the ini has no Dxgi value)
+    if dxgi_quirks.disables_dxgi(opts.get("exe")):
+        vals[("Spoofing", "Dxgi")] = "false"
+    # per-game OptiScaler keys (profiles.py "ini") win over both, e.g. Cyberpunk's Dxgi=false, Control's Dxgi=true
     vals.update(profiles.ini_overrides(opts.get("appid", "")))
     if opts.get("log_file"):  # overlay setups: the log goes to the kit's folder, not into the game folder
         vals[("Log", "LogFileName")] = opts["log_file"]
@@ -798,7 +925,7 @@ def legacy_record(before, set_by_us, dx12_added):
     return launchopts.derive(before, set_by_us, ours_token, [DX12_ARG] if dx12_added else [])
 
 
-def launch_build(options, record, algo, unreal, fg=False, extra_env=(), own_api=False):
+def launch_build(options, record, algo, unreal, extra_env=(), own_api=False):
     """0.8.17: Steam's options with SGSR 3: (new options, the record of what Vela added). record: what Vela added before
     (taken out first, exactly); every other token stays as it is, where it is. extra_env: the game profile's. A variable
     the player sets himself (same NAME=) is not added: his value wins (WINEDLLOVERRIDES as before). -dx12 only for Unreal
@@ -809,17 +936,15 @@ def launch_build(options, record, algo, unreal, fg=False, extra_env=(), own_api=
     env = [DLL_OVERRIDE]
     if ALGO_ENV.get(algo):
         env.append(ALGO_ENV[algo])
-    if fg:
-        env += [FG_ENV]  # (0.4.11-0.4.15 added FG_TU_ENV: A740 supports no preempt_optimize, "supported flags: 0x6")
     env += list(extra_env)
     return launchopts.replace(options or "", record, env, [DX12_ARG] if add_dx else [])
 
 
-def launch_on(options, algo, unreal, dx12_ours=False, fg=False, extra_env=(), own_api=False):
+def launch_on(options, algo, unreal, dx12_ours=False, extra_env=(), own_api=False):
     """launch_build for options this module wrote itself with no record of them (tests, old callers): every token that
     looks like ours counts as ours, -dx12 when dx12_ours. Returns (new options, whether -dx12 was added by us)."""
     rec = launchopts.derive(None, options or "", ours_token, [DX12_ARG] if dx12_ours else [])
-    new, rec = launch_build(options, rec, algo, unreal, fg, extra_env, own_api)
+    new, rec = launch_build(options, rec, algo, unreal, extra_env, own_api)
     return new, DX12_ARG in rec["args"]
 
 
@@ -894,7 +1019,7 @@ def run_api(text, created):
 
 def log_summary(path, since=0.0):
     """What the last game run did, from OptiScaler.log: SGSR 3 (or SGSR 2, a Vela live model) created (sizes), which
-    algorithm really ran (v1f, the student, v1 when the Vulkan interop is missing, FSR 4.1 inside SGSR 3), the temporal box, SGSR-FG, the low-latency path. Live model changes re-create the upscaler
+    algorithm really ran (v1f, the student, v1 when the Vulkan interop is missing, FSR 4.1 inside SGSR 3), the temporal box, the low-latency path. Live model changes re-create the upscaler
     while the game runs: the model, sizes and fallbacks are the last upscaler's."""
     try:
         st = os.stat(path)
@@ -952,11 +1077,6 @@ def log_summary(path, since=0.0):
     if down in presets.FSR4_MODELS:
         fsr4_fail = True
         want = [down]
-    fg = None
-    if "SGSR-FG: init failed" in text:
-        fg = "failed"
-    elif "SGSR-FG: on" in text:
-        fg = "on"
     m = re.findall(r"LowLatency algo: (\w+)", text)
     last = inits[-1].groups() if inits else None
     return {
@@ -976,7 +1096,6 @@ def log_summary(path, since=0.0):
         "student_fallback": fallback and "SGSR3 student" in seg or "student (Vulkan interop) is not available" in seg,
         "v1f_fallback": v1f_fail,
         "sgsr2_instead": down,
-        "fg": fg,
         "low_latency": m[-1] if m else None,
         "errors": len(re.findall(r"SGSR3[^\n]*(failed|missing inputs)", seg)),
         # 0.8.0: the network on the NPU (the fork's "Vela NPU:" log lines)
@@ -1027,6 +1146,7 @@ class Sgsr3:
         self.new_mode = "copy"  # how a new setup gets its files: "wrapper", "launcher" or "copy" (main sets it)
         self.probe = None       # fn(exe_dir, work, scratch) -> (ok, why); None: velakit.probe_game
         self._probes = {}       # appid -> (time, overlay works)
+        self._stamps = {}       # V14: appid -> {kit file path: (size, mtime_ns) | None} as refresh_dll left them
         try:
             with open(os.path.join(assets_dir, "VERSION.json"), encoding="utf-8") as f:
                 self.version = json.load(f)
@@ -1041,10 +1161,18 @@ class Sgsr3:
         if hit and not fresh and time.time() - hit[0] < 120:
             return hit[1]
         root, name = find_install(self.home, appid)
-        res = {"appid": appid, "install_dir": root, "name": name, "engine": "", "exe_dir": None, "exe": None,
+        native = None
+        if not root and is_shortcut(appid):
+            # 0.8.22: a shortcut to a Linux program (an emulator): its folder, no scan, so the check says "a Linux game"
+            d, n, windows = shortcut_install(self.home, appid)
+            native = d if d and not windows else None
+            name = n if native else name
+        res = {"appid": appid, "install_dir": root or native, "name": name, "engine": "", "exe_dir": None, "exe": None,
                "inputs": [], "anticheat": [ANTICHEAT_APPIDS[appid]] if appid in ANTICHEAT_APPIDS else []}
         if root:
             res.update(scan_dir(root, appid))
+        if is_shortcut(appid):
+            profiles.link_shortcut(appid, res["exe"])  # 0.8.22: a shortcut of a profiled game gets that game's profile
         res["anticheat"] = anticheat_labels(res["anticheat"], appinfo_anticheat(self.home, appid))
         self.cache[appid] = (time.time(), res)
         return res
@@ -1111,6 +1239,10 @@ class Sgsr3:
         from armada-game-launch: options without it (Steam's options as read) get the launcher token instead."""
         if self.new_mode not in ("wrapper", "launcher"):
             return "copy"
+        if isinstance(launch_options, str) and launchopts.wrapped_cmd(launch_options):
+            # V02 (audit 2026-11-09): eval $( echo "%command%" | sed ... ): no launcher can stand in front of that shell
+            # command; the files go into the game folder and Vela's variables in front, which works with it
+            return "copy"
         sc = self.scan(appid)
         if not sc["exe_dir"] or not self.overlay_ok(appid, sc):
             return "copy"
@@ -1168,6 +1300,11 @@ class Sgsr3:
         if on:
             if velakit.LAUNCHER_TOKEN in launchopts.words(launch_options):
                 return launch_options
+            if launchopts.wrapped_cmd(launch_options):
+                # V02: options changed to a wrapped %command% after the setup: the launcher in front would start "eval" as a
+                # program. They stay as the player wrote them (the game starts, without Vela)
+                self.log(f"sgsr3: {appid}: launch options wrap %command% in a shell command, Vela's launcher is not put in front")
+                return launch_options
             new, rec = launchopts.add(launch_options, [velakit.LAUNCHER_TOKEN])
             _atomic_write(path, json.dumps(rec).encode("utf-8"))
             return new
@@ -1181,7 +1318,100 @@ class Sgsr3:
         k = {"on": True, "appid": str(appid), "mode": st.get("mode"), "game_dir": sc["exe_dir"], "layer": d,
              "work_dir": velakit.work_dir(sc["install_dir"], sc["exe_dir"], sc["appid"]), "files": sorted(files),
              "options": options if isinstance(options, str) else launchopts.CMD}
+        if profiles.dx12_only(appid):  # DX12O: vela-launch decides at launch time from the game's own command (Steam's options untouched)
+            k["dx12_only"] = True
         _atomic_write(os.path.join(self.kit_root(appid), "launch.json"), json.dumps(k, indent=2).encode("utf-8"))
+
+    def kit_missing(self, appid):
+        """KIT1 (2026-11-11, Control 870780): the files the kit's launch.json lists that are not in the kit (vela-launch leaves such a
+        kit out of every launch: "kit incomplete"). [] for a whole kit, a kit that is off, or no overlay setup."""
+        root = self.kit_root(appid)
+        k = self._read_json(os.path.join(root, "launch.json")) or {}
+        if not k.get("on") or not isinstance(k.get("layer"), str):
+            return []
+        return [rel for rel in k.get("files") or () if not os.path.isfile(os.path.join(k["layer"], *rel.split("/")))]
+
+    def _sync_launch_files(self, appid, files):
+        """KIT1: launch.json's "files" = what the kit holds for the options now. True when it was rewritten."""
+        path = os.path.join(self.kit_root(appid), "launch.json")
+        k = self._read_json(path)
+        files = sorted(files)
+        if not isinstance(k, dict) or not k.get("on") or sorted(k.get("files") or []) == files:
+            return False
+        old = sorted(k.get("files") or [])
+        k["files"] = files
+        _atomic_write(path, json.dumps(k, indent=2).encode("utf-8"))
+        self.log(f"sgsr3: {appid}: kit list mended: launch.json listed {old}, the kit holds {files}")
+        return True
+
+    def left_out(self, appid, since):
+        """V03c (audit 2026-11-09): vela-launch left the kit out of the launch that began at `since` (its last launch.log line
+        says so and is not older than that start): the game runs without Vela. None: no such line, or not an overlay setup."""
+        path = os.path.join(self.kit_root(appid), "launch.log")
+        try:
+            if since is None or os.path.getmtime(path) < since:
+                return None
+            with open(path, encoding="utf-8", errors="replace") as f:
+                lines = [ln for ln in f.read().splitlines() if ln.strip()]
+        except OSError:
+            return None
+        last = lines[-1] if lines else ""
+        return last.split("Vela left out of this launch:", 1)[1].strip() if "Vela left out of this launch:" in last else None
+
+    def _launch_follow(self, appid, sc):
+        """V03 (audit 2026-11-09): launch.json follows the game's folder. It was written only by enable; after the game was
+        moved to another library vela-launch found no game_dir and left the kit out of every launch (the game ran without
+        Vela, the panel said On). True when it was rewritten."""
+        path = os.path.join(self.kit_root(appid), "launch.json")
+        k = self._read_json(path)
+        if not isinstance(k, dict) or not k.get("on") or not sc.get("exe_dir") or k.get("game_dir") == sc["exe_dir"]:
+            return False
+        old = k.get("game_dir")
+        k["game_dir"] = sc["exe_dir"]
+        k["work_dir"] = velakit.work_dir(sc["install_dir"], sc["exe_dir"], sc["appid"])
+        _atomic_write(path, json.dumps(k, indent=2).encode("utf-8"))
+        self.log(f"sgsr3: {appid}: the game folder moved ({old} -> {sc['exe_dir']}): launch.json follows")
+        return True
+
+    def kits_uninstall(self):
+        """V08 (audit 2026-11-09): the plugin is being uninstalled. Every kit that is on gets "on": false in its launch.json, so
+        vela-launch (which lives outside the plugin) passes the game through, and "uninstalled": true, so a later plugin start
+        can switch it on again (for Decky an update is an uninstall followed by an install). Returns the appids."""
+        done = []
+        try:
+            names = sorted(os.listdir(self.kits_dir))
+        except OSError:
+            return done
+        for appid in names:
+            path = os.path.join(self.kits_dir, appid, "launch.json")
+            k = self._read_json(path)
+            if isinstance(k, dict) and k.get("on"):
+                k["on"] = False
+                k["uninstalled"] = True
+                _atomic_write(path, json.dumps(k, indent=2).encode("utf-8"))
+                done.append(appid)
+        return done
+
+    def kits_reinstall(self):
+        """V08: plugin start. A kit an uninstall switched off is on again when its state still says the game is set up (a kit
+        the player switched Off has no marker and stays off). Returns the appids switched on."""
+        done = []
+        try:
+            names = sorted(os.listdir(self.kits_dir))
+        except OSError:
+            return done
+        for appid in names:
+            root = os.path.join(self.kits_dir, appid)
+            path = os.path.join(root, "launch.json")
+            k = self._read_json(path)
+            if not isinstance(k, dict) or not k.get("uninstalled"):
+                continue
+            k.pop("uninstalled")
+            if os.path.isfile(os.path.join(root, "state.json")):
+                k["on"] = True
+                done.append(appid)
+            _atomic_write(path, json.dumps(k, indent=2).encode("utf-8"))
+        return done
 
     def _kit_off(self, appid, st):
         """Off in an overlay setup: the launcher stops using the kit, the state is kept as state.off.json."""
@@ -1209,7 +1439,7 @@ class Sgsr3:
         if cfg:
             return {"static": cfg, "installed": STATIC_INSTALLED, "runtime": STATIC_RUNTIME,
                     "src": {"dxgi.dll": os.path.join(os.path.dirname(self.assets), STATIC_ASSETS, "dxgi.dll"),
-                            FSR4VK: os.path.join(self.assets, FSR4VK), FG_DLL: os.path.join(self.assets, FG_DLL)},
+                            FSR4VK: os.path.join(self.assets, FSR4VK), FFX_DLL: os.path.join(self.assets, FFX_DLL)},
                     "log": "sgsr3intercept.log"}
         src = {rel: os.path.join(self.assets, a) for rel, a in ASSET_OF.items()}
         src[AMDXC] = os.path.join(self.home, AMDXC_DIR, AMDXC)
@@ -1230,8 +1460,9 @@ class Sgsr3:
         VERSION.json edit to be recognised in the games."""
         return self._md5(os.path.join(self.assets, "OptiScaler.dll")) or self.version.get("md5")
 
-    def fg_available(self):
-        return os.path.isfile(os.path.join(self.assets, FG_DLL))
+    def ffx_available(self):
+        """The FidelityFX SDK DX12 DLL (FSR 3.1) is in the plugin."""
+        return os.path.isfile(os.path.join(self.assets, FFX_DLL))
 
     def fsr4_available(self):
         """FSR 4 can be a model: AMD's driver library is on the console and the FidelityFX SDK DLL is in the plugin.
@@ -1243,11 +1474,11 @@ class Sgsr3:
     def fsr3_available(self):
         """0.8.2: FSR 3.1 can be a live model: the fork has patch 0014 (VERSION.json "fsr3_live") and the
         FidelityFX SDK DLL is in the plugin."""
-        return self.fg_available() and bool(self.version.get("fsr3_live"))
+        return self.ffx_available() and bool(self.version.get("fsr3_live"))
 
     def fsr4_driver(self):
         """AMD's driver FSR 4 route (FFX backend + amdxcffx64.dll): off, see FSR4_READY."""
-        return FSR4_READY and os.path.isfile(os.path.join(self.home, AMDXC_DIR, AMDXC)) and self.fg_available()
+        return FSR4_READY and os.path.isfile(os.path.join(self.home, AMDXC_DIR, AMDXC)) and self.ffx_available()
 
     def _log(self, path, since):
         try:
@@ -1390,6 +1621,33 @@ class Sgsr3:
             return "foreign"
         return "old" if written <= float(st.get("updated_at") or st.get("installed_at") or 0) + 2 else "foreign"
 
+    def kit_dxgi(self, d, st):
+        """V20 (audit 2026-11-09): the OptiScaler kit's dxgi.dll, told apart like static_dxgi does for the static kit:
+        "ours" (the plugin's build), "old" (an older build of ours: the hash Vela recorded when it wrote the file; a setup
+        made before this fix recorded none: then a file not written since Vela's last write), "foreign" (anything else: the
+        game's own file back after a verify, another mod), "missing"; None: the plugin's own DLL is not there to compare.
+        status() called every file that was not the CURRENT build "changed": a plugin update while a game ran (the kit is
+        refreshed only while the game is closed) left the card red until the game exited, with nothing wrong."""
+        ours = self.dll_md5()
+        if not ours:
+            return None
+        target = os.path.join(d, "dxgi.dll")
+        cur = self._md5(target)
+        if not cur:
+            return "missing"
+        if cur == ours:
+            return "ours"
+        orig = (st.get("files") or {}).get("dxgi.dll") or {}
+        if orig.get("existed") and cur == orig.get("md5"):
+            return "foreign"  # the game's own file is back (verify)
+        if st.get("dxgi_md5"):
+            return "old" if cur == st["dxgi_md5"] else "foreign"
+        try:
+            written = os.path.getmtime(target)
+        except OSError:
+            return "foreign"
+        return "old" if written <= float(st.get("updated_at") or st.get("installed_at") or 0) + 2 else "foreign"
+
     def _refresh_static(self, appid, d, st, kit):
         """0.8.11: the static_fsr2 kit follows the plugin like OptiScaler's does (game closed: the caller checks): an older
         interceptor of ours and the FSR 4 provider we put there are replaced; a foreign dxgi.dll is never touched (the
@@ -1421,18 +1679,28 @@ class Sgsr3:
                  + (f", {FSR4VK} -> {(self._md5(src_vk) or '')[:8]}" if vk_old else ""))
         return True
 
-    def _kit_wanted(self, kit, clean, st):
+    def _game_own(self, d, st, sc, rel):
+        """V10 (audit 2026-11-09): whether the game has its own file rel in its exe folder. A copy setup: the backup record
+        (what was there before Vela's file). An overlay setup: the game's exe folder itself; the record is about the kit's
+        folder, which never held the game's file, so it said "none" always and Vela's SDK 1.1.4 amd_fidelityfx_dx12.dll was
+        mounted over a game's own (possibly newer) one."""
+        if d and self._is_kit(d):
+            exe = (sc or {}).get("exe_dir") or st.get("exe_dir")
+            return bool(exe) and os.path.isfile(os.path.join(exe, *rel.split("/")))
+        return bool((st.get("files") or {}).get(rel, {}).get("existed"))
+
+    def _kit_wanted(self, kit, clean, st, d=None, sc=None):
         """The kit files (besides OptiScaler.ini) Vela puts into the game folder for these options: the DLL and OptiPatcher
         always, the FidelityFX DLL / AMD's driver library / the FSR 4 provider while a model needs them (enable() and the
-        repair use the same list)."""
+        repair use the same list). d, sc (V10): where the setup is and the game's scan (_game_own)."""
         fsr4 = not kit["static"] and self.fsr4_driver()
-        fsr3 = self.fg_available() if kit["static"] else self.fsr3_available()
+        fsr3 = self.ffx_available() if kit["static"] else self.fsr3_available()
         out = set()
         for rel in kit["installed"]:
             if rel == "OptiScaler.ini":
                 continue
-            if rel not in OPTIONAL or (rel == FG_DLL and (clean.get("fg") or fsr4)) or \
-                    (rel == FG_DLL and fsr3 and not (st.get("files") or {}).get(rel, {}).get("existed")) or \
+            if rel not in OPTIONAL or (rel == FFX_DLL and fsr4) or \
+                    (rel == FFX_DLL and fsr3 and not self._game_own(d, st, sc, rel)) or \
                     (rel == AMDXC and fsr4) or (rel == FSR4VK and self.fsr4_available()):
                 out.add(rel)
         return out
@@ -1440,10 +1708,45 @@ class Sgsr3:
     def _ini_text(self, sc, opts, d=None):
         extra = {"log_file": wine_path(os.path.join(os.path.dirname(d), "OptiScaler.log"))} if self._is_kit(d) else {}
         with open(os.path.join(self.assets, "OptiScaler.ini"), encoding="utf-8", newline="") as f:
-            return make_ini(f.read(), {**opts, "appid": sc["appid"], "fsr_pattern": fsr_pattern(sc),
+            return make_ini(f.read(), {**opts, "appid": sc["appid"], "exe": sc.get("exe"), "fsr_pattern": fsr_pattern(sc),
                                        "fsr4_driver": self.fsr4_driver(), **extra})
 
     def refresh_dll(self, appid):
+        """V14 (audit 2026-11-09): the full check (_refresh_dll below), then the kit's files as they are now are remembered for
+        kit_unchanged, so the 10 s loop can skip the full check while nothing touched them."""
+        out = self._refresh_dll(appid)
+        self._stamps[str(appid)] = {p: self._stat(p) for p in self._kit_paths(appid)}
+        return out
+
+    @staticmethod
+    def _stat(path):
+        try:
+            st = os.stat(path)
+            return (st.st_size, st.st_mtime_ns)
+        except OSError:
+            return None
+
+    def _kit_paths(self, appid):
+        """The files the full check looks after: every kit file the state lists, OptiScaler.ini, the state, launch.json."""
+        sc = self.scan(appid)
+        d = self.where(appid, sc)
+        st = self.read_state(d) if d else None
+        if st is None:
+            return []
+        paths = [os.path.join(d, *rel.split("/")) for rel in sorted(st.get("files") or {})]
+        paths += [os.path.join(d, "OptiScaler.ini"), self._state_path(d)]
+        if self._is_kit(d):
+            paths.append(os.path.join(self.kit_root(appid), "launch.json"))
+        return paths
+
+    def kit_unchanged(self, appid):
+        """V14: True when every file refresh_dll looked after still has the size and time it had then (one stat per file: no
+        folder walk, no ini build). False: never checked in this plugin run, or a file is gone / changed (another plugin's
+        install or uninstall in the same folder, 0.8.15): the caller runs the full check now."""
+        was = self._stamps.get(str(appid))
+        return was is not None and all(self._stat(p) == v for p, v in was.items())
+
+    def _refresh_dll(self, appid):
         """The kit in a closed game Vela is on in follows the plugin and is whole (the caller checks the game is closed; the
         user restarts the game himself; the game's own files stay in the backup). Returns True when anything was written.
         0.5.4: an older dxgi.dll of ours is replaced. 0.8.11: the static_fsr2 interceptor too (_refresh_static).
@@ -1459,8 +1762,9 @@ class Sgsr3:
         d = self.where(appid, sc)
         st = self.read_state(d) if d else None
         kit = self.kit(appid)
+        moved = st is not None and self._is_kit(d) and self._launch_follow(appid, sc)  # V03: the game folder moved
         if st is not None and kit["static"] and st.get("kind") == "static_fsr2":
-            return self._refresh_static(appid, d, st, kit)
+            return self._refresh_static(appid, d, st, kit) or moved
         if st is None or kit["static"] or st.get("kind", "optiscaler") != "optiscaler":
             return False
         opts = dict(DEFAULT_OPTS)
@@ -1468,7 +1772,15 @@ class Sgsr3:
         st.setdefault("files", {})
         bdir = self._bdir(d)
         fixed = []
-        for rel in sorted(self._kit_wanted(kit, opts, st)):
+        wanted = self._kit_wanted(kit, opts, st, d, sc)
+        if self._is_kit(d) and FFX_DLL not in wanted and self._game_own(d, st, sc, FFX_DLL):
+            # V10: a kit an older Vela set up carries Vela's FidelityFX DLL although the game has its own: Vela's copy goes
+            # out of the kit (Vela's own folder; only a file that IS Vela's build), so nothing is mounted over the game's
+            target = os.path.join(d, FFX_DLL)
+            if os.path.isfile(target) and self._md5(target) == self._md5(kit["src"].get(FFX_DLL)):
+                os.remove(target)
+                fixed.append(f"{FFX_DLL} out of the kit (the game has its own)")
+        for rel in sorted(wanted):
             src = kit["src"].get(rel)
             want = self._md5(src) if src else None
             target = os.path.join(d, *rel.split("/"))
@@ -1478,6 +1790,15 @@ class Sgsr3:
                 st["files"][rel] = self._backup_one(d, bdir, rel)  # an install that did not list it: the game's file first
             _atomic_copy(src, target)
             fixed.append(rel)
+        if self._is_kit(d):
+            # KIT1: launch.json lists exactly what the kit holds for these options (V10 above took Vela's FidelityFX DLL out of
+            # Control's kit and left it in the list: vela-launch refused the kit on every launch). A wanted file still missing is
+            # an error in the log (and kit_missing() in the status), never a silent Vela-off
+            gone = [rel for rel in sorted(wanted) if not os.path.isfile(os.path.join(d, *rel.split("/")))]
+            if gone:
+                self.log(f"sgsr3: {appid}: ERROR kit incomplete: {', '.join(gone)} missing (no source in the plugin?)")
+            if self._sync_launch_files(appid, sorted(wanted) + ["OptiScaler.ini"]):
+                fixed.append("launch.json files")
         try:
             ini = self._ini_text(sc, opts, d)
         except OSError:
@@ -1493,22 +1814,26 @@ class Sgsr3:
                 _atomic_write(ini_path, ini.encode("utf-8"))
                 fixed.append("OptiScaler.ini")
         if not fixed:
-            return False
-        st.update({"version": self.version.get("dll", ""), "updated_at": time.time()})
+            return bool(moved)
+        st.update({"version": self.version.get("dll", ""), "updated_at": time.time(),
+                   "dxgi_md5": self._md5(kit["src"]["dxgi.dll"])})  # V20: the build in the kit now (kit_dxgi)
         self._write_state(d, st)
         self.log(f"sgsr3: {appid} kit repaired (game closed): {', '.join(fixed)}"
                  + (f"; dxgi.dll updated to {self.version.get('dll', '')}" if "dxgi.dll" in fixed else ""))
         return True
 
-    def status(self, appid):
+    def status(self, appid, run_since=None):
+        """run_since (V03, audit 2026-11-09): when the game's current run started; a log older than it is the previous run's and
+        is not shown (a run that started without Vela showed "Works" from the last good run's log)."""
         sc = self.scan(appid)
         d = self.where(appid, sc)
         st = self.read_state(d) if d else None
         other = bool(sc["exe_dir"]) and os.path.isfile(os.path.join(sc["exe_dir"], OTHER_OPTISCALER))
         out = {"scan": sc, "available": bool(sc["exe_dir"]) and not sc["anticheat"], "installed": st is not None,
                "opts": dict(DEFAULT_OPTS), "version": self.version.get("dll", ""), "intact": None, "log": None,
-               "fg_available": self.fg_available(), "fsr4_available": self.fsr4_available(), "fsr3_available": self.fsr3_available(), "other_optiscaler": other, "menu_hint": menu_hint(sc),
-               "profile": profiles.public(sc["appid"])}
+               "fsr4_available": self.fsr4_available(), "fsr3_available": self.fsr3_available(), "other_optiscaler": other, "menu_hint": menu_hint(sc),
+               "profile": profiles.public(sc["appid"]),
+               "kit_missing": self.kit_missing(sc["appid"]) if st is not None and self._is_kit(d) else []}  # KIT1
         out["opts"] = resolve_mode({**DEFAULT_OPTS, **profiles.defaults(sc["appid"])}, sc["appid"])
         out["modes"] = {m: dict(zip(("algo", "ratio"), profiles.mode_config(sc["appid"], m, MODE_CONFIG[m])))
                         for m in MODE_CONFIG}
@@ -1516,9 +1841,8 @@ class Sgsr3:
         out["static_fsr2"] = kit["static"]
         if kit["static"]:
             out["opts"] = {**out["opts"], "algo": "student" if kit["static"].get("algo", "ai") == "ai" else "v1f"}
-            out["fg_available"] = False
             # 0.8.3-re: the interceptor's live models; FSR 3.1 needs only the SDK DLL (no fork patch)
-            out["fsr3_available"] = self.fg_available()
+            out["fsr3_available"] = self.ffx_available()
             out["live_models"] = ["fsr4", "fsr4fast", "fsr3", "sgsr2"]  # 0.8.13: no Vela AI / SR in the panel
         if st:
             opts = dict(DEFAULT_OPTS)
@@ -1532,11 +1856,12 @@ class Sgsr3:
                 out["intact"] = None if sd is None else sd in ("ours", "old")
                 out["dxgi_old"] = sd == "old"
             else:
-                ours = self.dll_md5()
-                out["intact"] = self._md5(os.path.join(d, "dxgi.dll")) == ours if ours else None
+                sd = self.kit_dxgi(d, st)  # V20: an older build of ours is not "changed" either
+                out["intact"] = None if sd is None else sd in ("ours", "old")
+                out["dxgi_old"] = sd == "old"
             path = self._log_path(d, kit)
             if kit["static"]:
-                out["log"] = static_log_summary(path, st.get("installed_at", 0))
+                out["log"] = static_log_summary(path, max(st.get("installed_at", 0) or 0, run_since or 0))
                 # amax follows the game's FSR 2 mode: when the last run had another ratio than the launch options
                 # were made for, the panel re-applies them (game closed) -- amax_stale
                 m = _RX_VAMAX.search(st.get("launch_set") or "")
@@ -1545,7 +1870,7 @@ class Sgsr3:
                 out["amax"] = {"set": m.group(1) if m else None, "want": want,
                                "stale": float(m.group(1) if m else 0) != float(want)}
             else:
-                out["log"] = self._log(path, st.get("installed_at", 0))
+                out["log"] = self._log(path, max(st.get("installed_at", 0) or 0, run_since or 0))
         return out
 
     # -- enable / reconfigure
@@ -1577,7 +1902,7 @@ class Sgsr3:
             raise ValueError(f"unknown model {clean['model']}")
         if clean["res"] not in RESES:
             raise ValueError(f"unknown resolution {clean['res']}")
-        clean["fg"] = bool(clean["fg"])
+        clean.pop("fg", None)  # NOFG: an older Vela's SGSR-FG choice is not kept
         clean["latency"] = bool(clean["latency"])
         return clean
 
@@ -1610,11 +1935,8 @@ class Sgsr3:
             raise RuntimeError(NOT_READ)
         clean = resolve_mode(self.clean_opts(opts, {**profiles.defaults(appid), **self.migrate((st or {}).get("opts"))}),
                              appid)
-        if kit["static"]:  # the game's FSR 2 sets the render size; Vela AI / SR as the profile says, no FG / smoothing
-            clean.update({"algo": "student" if kit["static"].get("algo", "ai") == "ai" else "v1f", "fg": False,
-                          "ratio": "game"})
-        if clean["fg"] and not self.fg_available():
-            raise RuntimeError(f"plugin file assets/sgsr3/{FG_DLL} is missing, frame generation is not available")
+        if kit["static"]:  # the game's FSR 2 sets the render size; Vela AI / SR as the profile says, no smoothing
+            clean.update({"algo": "student" if kit["static"].get("algo", "ai") == "ai" else "v1f", "ratio": "game"})
         if st is None:
             st = self._backup(d, launch_options, resolution, kit, mode)
         else:
@@ -1625,13 +1947,13 @@ class Sgsr3:
             # the record stay; the panel sends Steam's options later (llfg_pending) and they get the same exact edit
             new_launch, dx12_added = st.get("launch_set"), st.get("dx12_added", False)
         elif kit["static"]:
-            new_launch, rec = launch_build(launch_options, rec, "v1f", False, False,
+            new_launch, rec = launch_build(launch_options, rec, "v1f", False,
                                            static_env(kit["static"], self.static_ratio(appid, d)))
         else:
             # "game" ratio: the fork takes amax from the real sizes itself
             amax = [f"OPTI_SGSR3_AMAX={amax_str(clean['ratio'])}"] \
                 if AMAX_BY_RATIO and clean["algo"] == "student" and clean["ratio"] != "game" else []
-            new_launch, rec = launch_build(launch_options, rec, clean["algo"], sc["engine"] == "Unreal", clean["fg"],
+            new_launch, rec = launch_build(launch_options, rec, clean["algo"], sc["engine"] == "Unreal",
                                            profiles.env_tokens(appid) + amax +
                                            (smooth_env(clean["smooth"]) if clean["algo"] == "v1f" else []),
                                            bool(self.api_args(appid)))
@@ -1641,7 +1963,7 @@ class Sgsr3:
         if not kit["static"]:
             ini = self._ini_text(sc, clean, d)
         bdir = self._bdir(d)
-        wanted = self._kit_wanted(kit, clean, st)
+        wanted = self._kit_wanted(kit, clean, st, d, sc)
         for rel in kit["installed"]:
             target = os.path.join(d, *rel.split("/"))
             if rel == "OptiScaler.ini":
@@ -1656,8 +1978,8 @@ class Sgsr3:
                         _atomic_copy(os.path.join(bdir, *rel.split("/")), target)
                 elif os.path.isfile(target):
                     os.remove(target)
-        if kit["static"]:
-            st["dxgi_md5"] = self._md5(kit["src"]["dxgi.dll"])  # 0.8.11: ours, to tell an older build from a foreign file
+        # 0.8.11 (static kit), V20 (every kit): the build Vela wrote, to tell an older build of ours from a foreign file
+        st["dxgi_md5"] = self._md5(kit["src"]["dxgi.dll"])
         st.update({"opts": clean, "version": "static-fsr2" if kit["static"] else self.version.get("dll", ""),
                    "launch_set": new_launch, "kind": "static_fsr2" if kit["static"] else "optiscaler",
                    "dx12_added": dx12_added, "added": rec, "updated_at": time.time()})
@@ -1667,6 +1989,9 @@ class Sgsr3:
         if self._is_kit(d):
             self._write_launch(appid, sc, d, st, new_launch,
                                sorted(wanted) + ([] if kit["static"] else ["OptiScaler.ini"]))
+            missing = self.kit_missing(appid)
+            if missing:  # KIT1: loud, not a kit vela-launch refuses on every launch
+                raise RuntimeError(f"kit incomplete: {', '.join(missing)} missing in {d}")
         self.log(f"sgsr3: {appid} on in {d} ({mode}): {clean}, launch: {new_launch}, Vela's tokens: {rec}")
         return {"launch_options": new_launch if launch_options is not None else None, "status": self.status(appid)}
 

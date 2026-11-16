@@ -30,6 +30,15 @@ import shlex
 import shutil
 import subprocess
 import time
+
+
+def _clean_env():
+    """V11 (audit 2026-11-09): the environment for a helper program (bash, sg): without the library and Python paths Decky's
+    frozen Python exports to the plugin process (a system program could load Decky's bundled libraries and fail to start).
+    Kept in this file: the module imports nothing else of the plugin."""
+    return {k: v for k, v in os.environ.items() if k not in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONHOME", "PYTHONPATH")}
+
+
 try:
     import grp
     import pwd
@@ -179,7 +188,7 @@ class CpuBoost:
             if group:
                 cmd = [self._sg, group, "-c", f"printf '%s\\n' {int(khz)} > {shlex.quote(path)}"]
                 try:
-                    r = self._run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
+                    r = self._run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=5, env=_clean_env())  # V11
                     if r.returncode == 0:
                         self._last_err = None
                         return True

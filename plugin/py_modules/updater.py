@@ -27,6 +27,7 @@ REPO = "zrprod9-cmyk/vela"
 RELEASES_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 DOWNLOAD_PREFIX = f"https://github.com/{REPO}/releases/download/"
 CHECK_EVERY = 24 * 3600
+RETRY_AFTER = 3600   # V23: after a failed automatic check (the loop wakes every hour)
 CHECK_TIMEOUT = 10
 DOWNLOAD_TIMEOUT = 120
 MAX_ANSWER = 1 << 20      # the release JSON
@@ -155,6 +156,10 @@ class Updater:
         if not isinstance(last, (int, float)):
             return True
         age = self.now() - last
+        # V23 (audit 2026-11-09): a check that failed (no Wi-Fi 60 s after boot) is tried again after RETRY_AFTER, not a day later
+        if d.get("error") and isinstance(d.get("failed_at"), (int, float)):
+            since = self.now() - d["failed_at"]
+            return since >= RETRY_AFTER or since < 0
         return age >= CHECK_EVERY or age < 0
 
     def state(self):
@@ -214,9 +219,11 @@ class Updater:
                     raise UpdateError("bad_answer")
                 d["latest"] = rel
                 d["error"] = None
+                d.pop("failed_at", None)
                 self.log(f"update check: latest {rel['version']}, installed {self.current()}")
             except UpdateError as e:
                 d["error"] = str(e)
+                d["failed_at"] = self.now()   # V23: the next automatic try is RETRY_AFTER from now
                 self.log(f"update check failed: {e}")
             self._save(d)
             return self.state()

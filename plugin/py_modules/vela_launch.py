@@ -42,12 +42,32 @@ def log(msg, appid=None):
         pass
 
 
-def app_id(env):
+def app_ids(env):
+    """Every appid the environment names, in order. 0.8.22: a non-Steam shortcut may get "0" in SteamAppId and a 64-bit
+    SteamGameId (appid << 32 | flags); its Proton prefix is still compatdata/<appid>, so that folder's name counts too."""
+    out = []
+
+    def add(value):
+        value = str(value).strip()
+        if value.isdigit() and value != "0" and value not in out:
+            out.append(value)
+
     for key in APPID_KEYS:
         value = env.get(key, "").strip()
-        if value.isdigit():
+        if key == "SteamGameId" and value.isdigit() and int(value) >= 2 ** 32:
+            value = str(int(value) >> 32)
+        add(value)
+    add(os.path.basename(env.get("STEAM_COMPAT_DATA_PATH", "").strip().rstrip("/")))
+    return out
+
+
+def app_id(env, kits=None):
+    """The game's appid: the first one the environment names that has a kit, else the first one named."""
+    ids = app_ids(env)
+    for value in ids:
+        if os.path.isfile(os.path.join(kits or KITS, value, "launch.json")):
             return value
-    return None
+    return ids[0] if ids else None
 
 
 def is_assignment(word):
@@ -140,11 +160,19 @@ def bwrap_argv(game, layer, work, bwrap=BWRAP):
             *mounts(game, layer), "--"]
 
 
-def probe(argv, run=subprocess.run, timeout=30):
-    """The same mounts with `true` as the program: (True, "") when they work, else (False, why)."""
+def clean_env(env=None):
+    """V11 (audit 2026-11-09): a copy of the environment without the library and Python paths Decky's frozen Python exports
+    to the plugin process: a system program (bwrap) started with them could load Decky's bundled libraries and fail to start."""
+    return {k: v for k, v in (os.environ if env is None else env).items()
+            if k not in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONHOME", "PYTHONPATH")}
+
+
+def probe(argv, run=subprocess.run, timeout=30, env=None):
+    """The same mounts with `true` as the program: (True, "") when they work, else (False, why).
+    env (V11): the environment for bwrap; None = this process's (the launcher itself: Steam's)."""
     try:
         r = run([*argv, "true"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                timeout=timeout)
+                timeout=timeout, **({} if env is None else {"env": env}))
     except (OSError, subprocess.SubprocessError) as e:
         return False, str(e)
     if r.returncode != 0:
@@ -153,9 +181,18 @@ def probe(argv, run=subprocess.run, timeout=30):
     return True, ""
 
 
+API_DX12 = ("-dx12", "-d3d12")
+API_DX11 = ("-dx11", "-d3d11")
+
+
+def api_flags(args):
+    """The standalone API flags in the game's command (Steam puts a launch entry's arguments there), lower case."""
+    return {a.lower() for a in args if a.lower() in API_DX12 + API_DX11}
+
+
 def plan(args, env, kits=None, run=subprocess.run):
     """(command, environment) with the game's kit, or None: no kit for this game. Raises when the kit cannot be used."""
-    appid = app_id(env)
+    appid = app_id(env, kits)
     if not appid:
         return None
     kit = read_kit(appid, kits)
@@ -170,6 +207,13 @@ def plan(args, env, kits=None, run=subprocess.run):
     if missing:
         raise RuntimeError(f"kit incomplete: {', '.join(missing)}")
     ours, extra = split_options(kit.get("options"))
+    if kit.get("dx12_only"):  # DX12O: this kit runs only on DX12; never -dx12 on top of -dx11 (a fatal UE error)
+        api = api_flags(args)
+        if api & set(API_DX11):
+            raise RuntimeError(f"the game starts with {sorted(api & set(API_DX11))[0]}: this game's kit runs only on DX12 "
+                               "(the game runs without Vela's kit)")
+        if not api and not api_flags(extra):
+            extra = extra + ["-dx12"]
     os.makedirs(work, exist_ok=True)
     argv = bwrap_argv(game, layer, work, kit.get("bwrap") or BWRAP)
     ok, why = probe(argv, run)

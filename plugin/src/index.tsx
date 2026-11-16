@@ -2,6 +2,7 @@ import { addEventListener, callable, definePlugin, removeEventListener, toaster,
 import { DialogButton, Focusable, PanelSection, PanelSectionRow, Router, staticClasses, TextField, ToggleField } from "@decky/ui";
 import { useEffect, useState } from "react";
 import { LuScanEye } from "react-icons/lu";
+import { makePoll, makeSerial } from "./serial";
 import {
   hintText, Key, menuHint, MODEL_IDS, MODEL_NAME, modelNote, ModelId, NAME, npuReason, reasonText, REPORT_REASONS, ReportReason,
   reportWhy, t, updateError,
@@ -31,6 +32,7 @@ type GameState = {
   appid: string; running: boolean; sgsr3: S3State; check: Check; scan?: { inputs?: string[] | null };
   models: { id: ModelId; ok: boolean; why?: string | null }[]; model: ModelId | "off"; hint: Hint | null;
   llfg_on?: boolean; layer_on?: boolean; launch_fix?: boolean; window_fix?: boolean;
+  not_in_launch?: "wrapped" | "left_out" | null;  // V03c: set up, but Vela is not in the game's launch
   report?: ReportPanel | null;
 };
 // 0.8.16: «Report a problem» (py_modules/report.py)
@@ -53,11 +55,11 @@ function wrap<A extends any[], T>(name: string) {
   };
 }
 const api = {
-  game: wrap<[appid: string, window: string | null], GameState>("game_state"),
+  game: wrap<[appid: string, window: string | null, launch: string | null], GameState>("game_state"),
   applyModel: wrap<[appid: string, model: string, launch: string | null, resolution: string | null], Switched>("apply_model"),
   llfgOff: wrap<[appid: string, launch: string | null], Switched>("llfg_off"),
   launchFix: wrap<[appid: string, launch: string | null], { launch_options: string | null }>("launch_fix"),
-  windowFix: wrap<[appid: string], { resolution: string }>("window_fix"),
+  windowFix: wrap<[appid: string], { resolution: string | null }>("window_fix"),
   reportPrepare: wrap<[appid: string, reason: string, text: string, launch: string | null, name: string, log: string | null], Preview>("report_prepare"),
   reportSend: wrap<[id: string], { report_id: string }>("report_send"),
   reportDismiss: wrap<[key: string, never: boolean], ReportPanel>("report_dismiss"),
@@ -69,11 +71,21 @@ const api = {
 
 // one-time fixes of a game set up by an older Vela, once per game while the plugin is loaded
 let llfgFixed = "";   // 0.8.9: Vela LL / FG removed
+// V06 / V07 (audit 2026-11-09): everything the panel writes (clicks, one-time fixes, slider steps) goes through ONE queue, so each
+// call reads Steam's launch options after the call before it wrote them
+const serial = makeSerial();
+let launchSeen: string | null = null;  // V03: the game whose Steam launch options went to the backend in this panel opening
 let launchKept = "";  // 0.8.15: NPU layer tokens in, VELA_FSR2_ALGO out, our -dx12 out where the game has its own API entries
 let layerFixed = "";  // 0.8.13: the any-game layer removed
 let windowFixed = ""; // 0.8.15: Steam's window back to the full 1920×1080 (no «Game window» any more)
 
 // ---- Steam -----------------------------------------------------------------------------------------------------------
+// a non-Steam shortcut's appid has the top bit set (gamecheck.is_shortcut)
+const isShortcut = (appid: string) => Number(appid) >= 2 ** 31 || Number(appid) < 0;
+function setLaunchOptions(appid: string, o: string) {
+  if (isShortcut(appid)) SteamClient.Apps.SetShortcutLaunchOptions(Number(appid), o);
+  else SteamClient.Apps.SetAppLaunchOptions(Number(appid), o);
+}
 function launchOptions(appid: string): Promise<string | null> {
   return new Promise((resolve) => {
     let done = false;
@@ -87,8 +99,10 @@ function launchOptions(appid: string): Promise<string | null> {
     try {
       // 0.8.17: only real details count (a callback without strLaunchOptions is not "no options": 0.8.16 took it for "" and
       // the backend wrote its own options over the player's); a slow Steam gets 10 s, then null = not read, nothing changes
+      // 0.8.22: a non-Steam shortcut keeps its options in strShortcutLaunchOptions (SetShortcutLaunchOptions writes them)
+      const key = isShortcut(appid) ? "strShortcutLaunchOptions" : "strLaunchOptions";
       reg = SteamClient.Apps.RegisterForAppDetails(Number(appid), (d: any) => {
-        if (typeof d?.strLaunchOptions === "string") finish(d.strLaunchOptions);
+        if (typeof d?.[key] === "string") finish(d[key]);
       });
     } catch {
       finish(null);
@@ -133,8 +147,12 @@ function statusOf(gs: GameState): Status {
   const s3 = gs.sgsr3, c = gs.check;
   if (gs.layer_on) return { dot: YELLOW, text: t("st.layer"), sub: gs.running ? t("st.layerRunning") : t("st.layerOff") };
   if (c.kind === "none") return { dot: GREY, text: t("not_supported"), sub: reasonText(c.reason) };
-  if (!s3.installed) return { dot: GREY, text: t("st.off") };
+  if (!s3.installed) return { dot: GREY, text: t("st.off") };  // NOFG (2026-11-15): no frame-generation / any-game status any more
   if (s3.intact === false) return { dot: RED, text: t("st.filesChanged"), sub: t("st.filesChangedSub") };
+  // V03c: set up, but Vela is not in this game's launch (options that wrap %command% in a shell command, or the launcher left the
+  // kit out of the running game). Never "On" / "Works". The wording is the owner's (2026-11-10, NIGHT/QUESTIONS.md answer 3):
+  // the two proposals as written, in English here (the panel is English only)
+  if (gs.not_in_launch) return { dot: YELLOW, text: t(gs.not_in_launch === "wrapped" ? "st.launchWrapped" : "st.notConnected") };
   const want = s3.live?.model ?? gs.model;
   const wantName = MODEL_NAME[want] ?? want;
   if (!gs.running) return { dot: GREEN, text: t("st.onIdle", { m: wantName }), sub: t("st.onIdleSub") };
@@ -409,6 +427,7 @@ function GameContent({ visible }: { visible: boolean }) {
   const [res, setRes] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [gs, setGs] = useState<GameState | null>(null);
+  const [gsApp, setGsApp] = useState<string | null>(null);  // V06: the game `gs` is the state of
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
@@ -418,7 +437,14 @@ function GameContent({ visible }: { visible: boolean }) {
     const r = await steamResolution(g.appid);
     setRes(r);
     try {
-      setGs(await api.game(g.appid, r));
+      // V03: Steam's launch options go with the first state of a game per panel opening, so the backend sees when they
+      // lost Vela's launcher / tokens (pasted over, reset) and answers launch_fix; later polls send none
+      const first = launchSeen !== g.appid;
+      const lo = first ? await launchOptions(g.appid) : null;
+      if (first) { launchSeen = g.appid; launchKept = ""; }
+      const s = await api.game(g.appid, r, lo);
+      setGs(s);
+      setGsApp(g.appid);
       setErr(null);
     } catch (e: any) {
       setErr(e?.message ?? String(e));
@@ -427,13 +453,16 @@ function GameContent({ visible }: { visible: boolean }) {
   };
   useEffect(() => {
     if (!visible) return;
-    load();
-    const t = setInterval(load, 1500);
-    return () => clearInterval(t);
+    launchSeen = null;  // V03: each opening reads Steam's launch options once
+    // V16: the next poll starts 1.5 s after the previous one came back (setInterval started one every 1.5 s whether or not the
+    // last had answered: with a slow state the calls piled up and clicks waited behind them)
+    return makePoll(load, 1500);
   }, [visible]);
 
   if (!game) return <PanelSection><Small>{t("t.noGame")}</Small></PanelSection>;
-  if (!gs) return <PanelSection><PanelSectionRow>{err ?? t("t.loading")}</PanelSectionRow></PanelSection>;
+  // V06: until the new game's own state has arrived nothing is shown or fixed from the previous game's state (its window_fix /
+  // layer_on flags acted on the new appid: Steam's window set to Default or Vela switched off in the wrong game)
+  if (!gs || gsApp !== game.appid) return <PanelSection><PanelSectionRow>{err ?? t("t.loading")}</PanelSectionRow></PanelSection>;
 
   const toast = (e: any) => toaster.toast({ title: NAME, body: e?.message ?? String(e) });
   const s3 = gs.sgsr3;
@@ -441,8 +470,7 @@ function GameContent({ visible }: { visible: boolean }) {
   const kind = gs.check.kind;
   const supported = kind !== "none" && !gs.layer_on;
   const model: ModelId | "off" = on ? gs.model : "off";
-
-  const setLaunch = (o: string) => SteamClient.Apps.SetAppLaunchOptions(Number(game.appid), o);
+  const setLaunch = (o: string) => setLaunchOptions(game.appid, o);
   const setOverride = async (r: string | null | undefined) => {
     if (!r) return;
     await SteamClient.Apps.SetAppResolutionOverride(Number(game.appid), r);
@@ -451,27 +479,32 @@ function GameContent({ visible }: { visible: boolean }) {
   const refresh = async () => {
     const r = await steamResolution(game.appid);
     setRes(r);
-    setGs(await api.game(game.appid, r));
+    setGs(await api.game(game.appid, r, null));
+    setGsApp(game.appid);
   };
-  const run = async (fn: () => Promise<void>) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await fn();
-      await refresh();
-    } catch (e: any) {
-      toast(e);
-    } finally {
-      setBusy(false);
-    }
+  // V06: jobs run one after another through the module's queue, not behind the render's `busy` (two fixes scheduled in one render
+  // both saw false). A click while something runs is dropped, as before; the one-time fixes are queued (queued = true).
+  const run = (fn: () => Promise<void>, queued = false) => {
+    if (!queued && serial.busy()) return Promise.resolve();
+    return serial.run(async () => {
+      setBusy(true);
+      try {
+        await fn();
+        await refresh();
+      } catch (e: any) {
+        toast(e);
+      } finally {
+        setBusy(false);
+      }
+    });
   };
   // the one click: the backend sets the files (first time), launch options, the live model and the NPU
-  const pick = (m: ModelId | "off") => run(async () => {
+  const pick = (m: ModelId | "off", queued = false) => run(async () => {
     const launch = await launchOptions(game.appid);
     const r = await api.applyModel(game.appid, m, launch, res);
     if (typeof r.launch_options === "string" && r.launch_options !== launch) await setLaunch(r.launch_options);
     await setOverride(r.resolution);
-  });
+  }, queued);
 
   // ---- silent one-time fixes of what an older Vela left ----
   if (gs.llfg_on && !busy && llfgFixed !== game.appid) {
@@ -480,7 +513,7 @@ function GameContent({ visible }: { visible: boolean }) {
       const launch = await launchOptions(game.appid);
       const r = await api.llfgOff(game.appid, launch);
       if (r.launch_options !== null && r.launch_options !== launch) await setLaunch(r.launch_options);
-    }), 0);
+    }, true), 0);
   }
   if (gs.launch_fix && !busy && launchKept !== game.appid) {
     launchKept = game.appid;
@@ -488,15 +521,15 @@ function GameContent({ visible }: { visible: boolean }) {
       const launch = await launchOptions(game.appid);
       const r = await api.launchFix(game.appid, launch);
       if (r.launch_options !== null && r.launch_options !== launch) await setLaunch(r.launch_options);
-    }), 0);
+    }, true), 0);
   }
   if (gs.window_fix && !busy && windowFixed !== game.appid) {
     windowFixed = game.appid;
-    setTimeout(() => run(async () => setOverride((await api.windowFix(game.appid)).resolution)), 0);
+    setTimeout(() => run(async () => setOverride((await api.windowFix(game.appid)).resolution), true), 0);
   }
   if (gs.layer_on && !gs.running && !busy && layerFixed !== game.appid) {
     layerFixed = game.appid;
-    setTimeout(() => pick("off"), 0);
+    setTimeout(() => pick("off", true), 0);
   }
 
   const status = statusOf(gs);
@@ -533,12 +566,13 @@ function GameContent({ visible }: { visible: boolean }) {
         <PanelSectionRow><div style={HEAD}>{t("t.sectionModel")}</div></PanelSectionRow>
         <PanelSectionRow>
           <Focusable style={{ display: "flex", flexDirection: "column" }} flow-children="vertical">
-            {supported && MODEL_IDS.filter((m) => offered.has(m)).map(modelButton)}
+            {/* PL4 (owner 2026-11-06): Off first, above the upscalers, for every kind of game */}
             {modelButton("off")}
+            {supported && MODEL_IDS.filter((m) => offered.has(m)).map(modelButton)}
           </Focusable>
         </PanelSectionRow>
         {busy && <Small>{t("t.busy")}</Small>}
-        {supported && !busy && (model === "off" ? <Small>{t("t.pickHint")}</Small> : speed && <Small>{speed}</Small>)}
+        {supported && !busy && (model === "off" ? offered.size > 0 && <Small>{t("t.pickHint")}</Small> : speed && <Small>{speed}</Small>)}
       </>)}
       <ReportBox game={game} rp={gs.report} onDone={() => { refresh().catch(() => undefined); }} />
     </PanelSection>

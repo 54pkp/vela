@@ -59,11 +59,41 @@
 #include "vela_npu_abi.h"
 #include "vela_npu_ext.h"
 #include "vela_npu_wait_spv.h"   // kWaitSpv (vela_npu_wait.comp)
+#include "vela_npu_poll.h"       // CPUW: the E1 poll settings (async share / step from the environment)
+#include "vela_npu_retire.h"     // A1: when a retired tensor set is freed
+static NpuPollCfg g_poll;            // CPUW: set once per device before its worker starts (same environment for every device)
+static NpuPollCfg g_poll_env;        // CPUW2: the environment's settings (the live file's keys go on top of these)
+static void vlog(const char* f, ...);
+#include <sys/stat.h>
+// CPUW2: the worker pins itself (pthread_self) to the list, or to every CPU for "all"
+static void worker_pin(const char* cpus, const char* why) {
+  int list[64]; const int n = npu_cpu_list(cpus, list, 64, CPU_SETSIZE);
+  cpu_set_t cs; CPU_ZERO(&cs);
+  if (n) for (int i = 0; i < n; i++) CPU_SET(list[i], &cs);
+  else { const long all = sysconf(_SC_NPROCESSORS_CONF); for (long c = 0; c < all && c < CPU_SETSIZE; c++) CPU_SET(c, &cs); }
+  vlog("worker pinned to %s (%s): %s", n ? cpus : "all CPUs", why, pthread_setaffinity_np(pthread_self(), sizeof cs, &cs) ? "failed" : "ok");
+}
+// CPUW2: VELA_NPU_LIVE_FILE, looked at by the worker every NPU_LIVE_EVERY jobs (one stat); read again when its time changed
+static void worker_live(long jobs) {
+  static const char* path = getenv("VELA_NPU_LIVE_FILE");
+  static struct timespec seen{0, 0}; static std::string cpusNow;
+  if (!path || !*path || jobs % NPU_LIVE_EVERY) return;
+  struct stat st;
+  if (stat(path, &st) || (st.st_mtim.tv_sec == seen.tv_sec && st.st_mtim.tv_nsec == seen.tv_nsec)) return;
+  seen = st.st_mtim;
+  char buf[512]; size_t n = 0;
+  if (FILE* f = fopen(path, "r")) { n = fread(buf, 1, sizeof buf - 1, f); fclose(f); }
+  buf[n] = 0;
+  std::string cpus; g_poll = npu_poll_live(g_poll_env, buf, &cpus);
+  vlog("live file %s at job %ld: async sleep %.0f %%, step %ld us%s%s", path, jobs, g_poll.asyncShare * 100.0, g_poll.asyncStepNs / 1000L,
+       cpus.empty() ? "" : ", worker_cpus ", cpus.c_str());
+  if (!cpus.empty() && cpus != cpusNow) { worker_pin(cpus.c_str(), "live file"); cpusNow = cpus; }
+}
 #define VELA_NPU_ACK_ERROR_TIMEOUT 5u   /* layer-private final status: GPU/HTP timeout or device lost (provider reason "error") */
 
 #define VL_EXPORT extern "C" __attribute__((visibility("default")))
-#define VL_BUILD 11u   /* layer build number: reported in every ack and in the log; the manifest's implementation_version is the same number */
-#define VL_BUILD_PREV 10u   /* previous layer build number */
+#define VL_BUILD 12u   /* layer build number: reported in every ack and in the log; the manifest's implementation_version is the same number */
+#define VL_BUILD_PREV 11u   /* previous layer build number */
 #define NSLOT 8
 #define KSTEP 11   /* steps of the bounded wait (111 << k iterations, k = 0..10: 227k in all) */
 
@@ -98,7 +128,8 @@ static void vlog(const char* f, ...) {
 static const uint32_t kCaps = VELA_NPU_CAP_ASYNC | VELA_NPU_CAP_TENSORS;
 static const uint32_t kPending = 0x7FFFFFFFu;  // record-time status of a marker whose final status is copied after the wait
 struct Inst { PFN_vkGetInstanceProcAddr gipa; VkInstance inst; };
-struct TSet { fsr4npu* npu = nullptr; VkBuffer buf = VK_NULL_HANDLE; VkDeviceMemory mem = VK_NULL_HANDLE; VkDeviceAddress bda = 0; uint64_t offAlt = 0, offOut1 = 0; };   // ping-pong: input slot 1, output slot 1 (0 = none)
+struct TSet { fsr4npu* npu = nullptr; VkBuffer buf = VK_NULL_HANDLE; VkDeviceMemory mem = VK_NULL_HANDLE; VkDeviceAddress bda = 0; uint64_t offAlt = 0, offOut1 = 0;   // ping-pong: input slot 1, output slot 1 (0 = none)
+  uint32_t gen = 0; double tRet = 0, tUse = 0; };   // A1: its generation; retired at; last zero-copy marker of the provider that named it (vela_npu_retire.h)
 enum { P_FREE = 0, P_RECORDED, P_QUEUED, P_DONE, P_DROPPED };
 struct Slot {
   VkEvent e1 = VK_NULL_HANDLE, e2 = VK_NULL_HANDLE;
@@ -139,11 +170,12 @@ struct Dev {
   std::unordered_map<VkCommandBuffer, CbRec> recs; std::atomic<int> nRec{0};
   std::unordered_map<VkCommandBuffer, VkCommandPool> cbPool;
   uint64_t qCounter = 0; std::thread worker; std::deque<Job> q; std::condition_variable cv; bool quit = false; double nextRetry = 0;
+  bool held = false; long retFreed = 0;   // A1: connections held off (too many retired sets); retired sets freed before vkDestroyDevice
   bool slow = false; long slowJobs = 0, relJobs = 0;   // slow: the worker waits for a slow HTP execute (frames go to the GPU meanwhile)
   long l4At = 0, connFails = 0; long jobs = 0, okJobs = 0, e1Timeouts = 0, npuErrors = 0, noDaemon = 0, reconnects = 0, markers = 0, forced = 0;
   double sumE1 = 0, maxE1 = 0, sumNpu = 0, maxNpu = 0, sumRec = 0, maxRec = 0;
   // worker only: low envelope of submit->E1 (the worker sleeps through most of it instead of polling) + a diag window
-  double e1Low = 0; long wJobs = 0, wPolls = 0; double wE1 = 0, wE1Max = 0, wNpu = 0, wNpuMax = 0, wSlept = 0;
+  double e1Low = 0; long wJobs = 0, wPolls = 0, wAsync = 0; double wE1 = 0, wE1Max = 0, wNpu = 0, wNpuMax = 0, wSlept = 0;
 };
 
 static std::mutex g_mtx;
@@ -344,6 +376,10 @@ static bool ctx_init(Dev* d) {  // d->mtx held; first PROBE: status buffer, even
   for (int i = 0; i < NSLOT; i++) { d->st[i * 16 + 4] = 0; d->st[i * 16 + 5] = 1; d->st[i * 16 + 6] = 1; }   // indirect dispatch args (x, 1, 1)
   bw_init(d);             // bounded wait setup
   install_exit_hooks();   // E2 release at process end
+  g_poll = g_poll_env = npu_poll_cfg(getenv("VELA_NPU_E1_SLEEP_PCT"), getenv("VELA_NPU_E1_STEP_US"));   // CPUW (PWR1 row 5)
+  vlog("worker E1 poll: async sleep %.0f %% of the low submit->E1 (%s), then %d tight polls and %ld us steps (%s); exact: %.0f %%, %d tight, %ld us",
+       g_poll.asyncShare * 100.0, g_poll.shareSet ? "VELA_NPU_E1_SLEEP_PCT" : "default", g_poll.asyncTight, g_poll.asyncStepNs / 1000L,
+       g_poll.stepSet ? "VELA_NPU_E1_STEP_US" : "default", NpuPollCfg::kExactShare * 100.0, NpuPollCfg::kExactTight, NpuPollCfg::kExactStepNs / 1000L);
   d->worker = std::thread(worker_main, d);
   pthread_setname_np(d->worker.native_handle(), "vela-npu-w");   // visible in /proc/<pid>/task/*/comm for per-thread CPU
   if (const char* cpus = getenv("VELA_NPU_WORKER_CPUS")) {
@@ -355,11 +391,19 @@ static bool ctx_init(Dev* d) {  // d->mtx held; first PROBE: status buffer, even
   }
   return true;
 }
-static void go_down(Dev* d, const char* why) {  // d->mtx held: retire the set (kept alive until vkDestroyDevice: GPU work may still use it)
+// A1: d->mtx held. Free the retired sets nothing can use any more (rules: vela_npu_retire.h). provenGen = generation of a job whose E1 was just seen, 0 = none.
+static void retired_sweep(Dev* d, uint32_t provenGen) {
+  if (d->retired.empty()) return; const double n = now_ms();
+  for (size_t i = 0; i < d->retired.size();) { TSet& r = d->retired[i];
+    if (!npu_retired_free(r.gen, r.tRet, r.tUse, provenGen, n)) { i++; continue; }
+    const uint32_t g = r.gen; const double age = n - r.tRet; set_free(d, r); d->retired.erase(d->retired.begin() + i); d->retFreed++;
+    vlog("retired gen %u freed after %.1f s (%s), %zu still retired", g, age / 1e3, provenGen && g < provenGen ? "a newer job passed the GPU" : "unused", d->retired.size()); }
+}
+static void go_down(Dev* d, const char* why) {  // d->mtx held: retire the set (GPU work may still use it: freed by retired_sweep or at vkDestroyDevice)
   if (d->state != 1) return;
   vlog("NPU DOWN (%s): gen %u retired, GPU path until fsr4npud is back", why, d->gen);
   if (d->set.npu) { fsr4npu_close(d->set.npu); d->set.npu = nullptr; }
-  d->retired.push_back(d->set); d->set = TSet{};
+  d->set.gen = d->gen; d->set.tRet = d->set.tUse = now_ms(); d->retired.push_back(d->set); d->set = TSet{};
   if (d->lastKick >= 0) { slot_unref(d, d->lastKick); d->lastKick = -1; }
   d->state = -1; d->nextRetry = now_ms() + env_int("VELA_NPU_RECONNECT_MS", 150);
 }
@@ -373,10 +417,10 @@ static void try_up(Dev* d, int connect_ms) {  // d->mtx NOT held
     if (d->state == 0) d->state = -1;
     d->nextRetry = now_ms() + env_int("VELA_NPU_RECONNECT_MS", 150); return;
   }
-  if (d->state == -2 || d->retired.size() > 64) { set_free(d, ns); return; }
+  if (d->state == -2 || npu_retire_hold(d->retired.size())) { set_free(d, ns); d->nextRetry = now_ms() + NpuRetire::kHoldMs; return; }   // A1: a brake with a retry (was: > 64 and never again)
   d->set = ns; d->nt = nt; for (int k = 0; k < 3; k++) { d->off[k] = off[k]; d->bytes[k] = bytes[k]; }
   if (d->state == -1) d->reconnects++;
-  d->gen++; d->state = 1; d->connFails = 0;
+  d->gen++; d->set.gen = d->gen; d->state = 1; d->connFails = 0; d->held = false;
   vline("daemon connected");
   vlog("NPU UP: gen %u, %u tensors, connect+alloc+import %.3f ms", d->gen, nt, now_ms() - t0);
 }
@@ -387,13 +431,14 @@ static void sleep_until_ms(double t) {
 }
 // the worker's wake-up time for a job: the GPU reaches E1 no earlier than ~ the shortest recent submit->E1, so sleep
 // through 85 % (async: its OP_WAIT is a frame later) / 70 % (exact: the GPU waits right after E1) of it, minus 0.25 ms.
-static double e1_wake(double tSubmit, double e1Low, bool async) { return e1Low > 1.0 ? tSubmit + e1Low * (async ? 0.85 : 0.70) - 0.25 : 0.0; }
+// CPUW: the async share is g_poll.asyncShare (VELA_NPU_E1_SLEEP_PCT, default 85 %); exact stays 70 % (vela_npu_poll.h)
+static double e1_wake(double tSubmit, double e1Low, bool async) { return npu_e1_wake(g_poll, tSubmit, e1Low, async); }
 static double e1_low_next(double low, double e1) { return low <= 0 ? e1 : e1 < low ? 0.5 * low + 0.5 * e1 : 0.97 * low + 0.03 * e1; }  // fast down, slow up
 static void line_diag(Dev* d) {  // d->mtx held; diag prefix: the plugin parser ignores it
   if (!d->wJobs) return;
-  vlog("window %ld ok jobs: submit->E1 mean %.2f max %.2f ms (low %.2f, slept %.2f ms/job) | kick->done mean %.2f max %.2f ms | polls/job %.1f",
-       d->wJobs, d->wE1 / d->wJobs, d->wE1Max, d->e1Low, d->wSlept / d->wJobs, d->wNpu / d->wJobs, d->wNpuMax, double(d->wPolls) / d->wJobs);
-  d->wJobs = d->wPolls = 0; d->wE1 = d->wE1Max = d->wNpu = d->wNpuMax = d->wSlept = 0;
+  vlog("window %ld ok jobs: submit->E1 mean %.2f max %.2f ms (low %.2f, slept %.2f ms/job) | kick->done mean %.2f max %.2f ms | polls/job %.1f | async %ld",
+       d->wJobs, d->wE1 / d->wJobs, d->wE1Max, d->e1Low, d->wSlept / d->wJobs, d->wNpu / d->wJobs, d->wNpuMax, double(d->wPolls) / d->wJobs, d->wAsync);
+  d->wJobs = d->wPolls = d->wAsync = 0; d->wE1 = d->wE1Max = d->wNpu = d->wNpuMax = d->wSlept = 0;
 }
 static void line_bw(Dev* d) {  // diagnostic prefix
   if (d->bw) vlog("bounded waits %ld (app pipeline rebound %ld, not known %ld)", d->bwWaits, d->bwRestores, d->bwNoRestore);
@@ -423,13 +468,19 @@ static void worker_main(Dev* d) {
       if (s.quarantine && (d->GetEventStatus(d->dev, s.e1) == VK_EVENT_SET || now_ms() - s.qSince > 2000)) { d->ResetEvent(d->dev, s.e1); s.quarantine = false; slot_unref(d, i); } }
     if (d->q.empty()) {
       if (d->quit) return;
-      if (d->state == -1 && now_ms() >= d->nextRetry) { d->nextRetry = now_ms() + 1e9; lk.unlock(); try_up(d, 20); lk.lock(); }
+      retired_sweep(d, 0);   // A1: the age rule
+      if (d->state == -1 && now_ms() >= d->nextRetry) {
+        if (npu_retire_hold(d->retired.size())) { d->nextRetry = now_ms() + NpuRetire::kHoldMs;   // A1: no new buffer while this many old ones are still held
+          if (!d->held) { d->held = true; vlog("NPU held off: %zu retired buffers are still in use by the GPU or the provider; next try every %.0f s", d->retired.size(), NpuRetire::kHoldMs / 1e3); } }
+        else { d->nextRetry = now_ms() + 1e9; lk.unlock(); try_up(d, 20); lk.lock(); } }
       continue;
     }
     Job j = d->q.front(); d->q.pop_front();
     Slot& s = d->slots[j.slot];
     fsr4npu* npu = (d->state == 1 && j.gen == d->gen) ? d->set.npu : nullptr;
+    const long jobsNow = d->jobs;
     lk.unlock();
+    worker_live(jobsNow);   // CPUW2: test settings from VELA_NPU_LIVE_FILE (nothing without the variable)
     double t0 = now_ms(), deadline = t0 + e1Tmo; bool seen = false; VkResult er = VK_SUCCESS;
     // in a game the GPU reaches E1 10-20 ms after the submit (the frame's own work queued ahead); polling all of it (20 us
     // nanosleep steps + timer slack) keeps a game-process thread waking for that whole time. Sleep through the certain part, then poll (async: 8 tight + 100 us steps; exact: as before).
@@ -440,7 +491,7 @@ static void worker_main(Dev* d) {
       er = d->GetEventStatus(d->dev, s.e1); polls++;
       if (er == VK_EVENT_SET) { seen = true; break; }
       if (er < 0) break;                                                          // device lost
-      if (spin > (j.async ? 8 : 200)) { timespec ts{0, j.async ? 100000L : 20000L}; nanosleep(&ts, nullptr); }   // tight, then steps
+      if (spin > npu_tight_polls(g_poll, j.async)) { timespec ts{0, npu_step_ns(g_poll, j.async)}; nanosleep(&ts, nullptr); }   // tight, then steps (CPUW: async step VELA_NPU_E1_STEP_US)
     }
     double tE1 = now_ms(); int st = S_OK; uint32_t ack; bool slow = false;
     if (seen) d->ResetEvent(d->dev, s.e1);
@@ -464,8 +515,9 @@ static void worker_main(Dev* d) {
     if (seen && !g_dying.load(std::memory_order_acquire)) for (int i = 0; i < NSLOT; i++) { Slot& o = d->slots[i];   // never after a release; a later E1 seen: the CP passed every earlier wait
       if (i != j.slot && o.e2Set && o.e2After < j.qn) { d->ResetEvent(d->dev, o.e2); o.e2Set = false; slot_unref(d, i); } }
     if (!s.e2Set) { s.e2Set = true; s.e2After = j.qn; s.refs++; }
+    if (seen && !g_dying.load(std::memory_order_acquire)) retired_sweep(d, j.gen);   // A1: this job passed the GPU: sets of older generations are done
     if (ack == VELA_NPU_ACK_OK) { d->okJobs++; double e1 = tE1 - j.tSubmit; d->sumE1 += e1; d->sumNpu += np; d->maxE1 = std::max(d->maxE1, e1); d->maxNpu = std::max(d->maxNpu, np);
-      d->e1Low = e1_low_next(d->e1Low, e1); d->wJobs++; d->wPolls += polls; d->wE1 += e1; d->wE1Max = std::max(d->wE1Max, e1); d->wNpu += np; d->wNpuMax = std::max(d->wNpuMax, np); d->wSlept += slept; }
+      d->e1Low = e1_low_next(d->e1Low, e1); d->wJobs++; d->wAsync += j.async ? 1 : 0; d->wPolls += polls; d->wE1 += e1; d->wE1Max = std::max(d->wE1Max, e1); d->wNpu += np; d->wNpuMax = std::max(d->wNpuMax, np); d->wSlept += slept; }
     else if (!seen) { d->e1Timeouts++; s.quarantine = true; s.qSince = now_ms(); s.refs++;
       vlog("job seq %llu slot %d: pack-done event not seen in %.0f ms%s", (unsigned long long)j.seq, j.slot, e1Tmo, er < 0 ? " (DEVICE LOST)" : "");
       if (er == VK_ERROR_DEVICE_LOST && d->state != -2) { go_down(d, "device lost"); d->state = -2; } }
@@ -568,12 +620,16 @@ static void record_marker(Dev* d, VkCommandBuffer cb, const VelaNpuCmd* c, VkBuf
   int copySlot = -1;
   if (c->version != VELA_NPU_VERSION) a.status = VELA_NPU_ACK_BADARGS;
   else if (c->op == VELA_NPU_OP_PROBE) {
-    char nm[64]; probe_name(c, nm); bool first, sw = false;
+    char nm[64]; probe_name(c, nm); bool first, sw = false, hold = false;
     { std::lock_guard<std::mutex> l(d->mtx); first = d->state == 0 && d->extOk && ctx_init(d); if (!d->extOk) d->state = -2;
       if (strcmp(nm, d->want)) { const bool had = d->want[0] != 0; memcpy(d->want, nm, sizeof nm);   // another daemon (graph)
         if (had && d->state == 1) go_down(d, "graph switch");
-        sw = had && d->state == -1; } }
-    if (first || sw) try_up(d, env_int("VELA_NPU_CONNECT_MS", 100));  // the only blocking call, once per device (fork context creation)
+        sw = had && d->state == -1; }
+      hold = npu_retire_hold(d->retired.size()); }   // A1
+    // A2: the connect retries (20 ms steps up to the budget) only at the device's FIRST probe, where a daemon may still be starting. A probe for
+    // another graph tries once: with no daemon it used to stall the recording thread 100 ms per graph name, twice every 300 frames; the worker
+    // keeps retrying in the background.
+    if ((first || sw) && !hold) try_up(d, first ? env_int("VELA_NPU_CONNECT_MS", 100) : 0);
     std::lock_guard<std::mutex> l(d->mtx);
     a.status = d->state == 1 ? VELA_NPU_ACK_OK : d->state == -2 ? VELA_NPU_ACK_ERROR_TIMEOUT : VELA_NPU_ACK_NODAEMON;
     if (a.status == VELA_NPU_ACK_OK) zc_info(d, a);
@@ -592,6 +648,7 @@ static void record_marker(Dev* d, VkCommandBuffer cb, const VelaNpuCmd* c, VkBuf
   else {
     std::lock_guard<std::mutex> l(d->mtx);
     const bool async = c->flags & VELA_NPU_F_ASYNC, zc = c->flags & VELA_NPU_F_ZEROCOPY; int si = -1;
+    if (zc && !d->retired.empty()) { const double n = now_ms(); for (TSet& r : d->retired) if (r.gen == c->pad0) r.tUse = n; }   // A1: the provider still packs into that buffer
     if (!(c->flags & VELA_NPU_F_TENSORS) || !img_ok(c->color) || !img_ok(c->output) || (c->motion.image && !img_ok(c->motion)) ||
         c->output.width != c->color.width || c->output.height != c->color.height) a.status = VELA_NPU_ACK_BADARGS;
     else if (d->state == -2 || !d->stBuf) a.status = d->state == -2 ? VELA_NPU_ACK_ERROR_TIMEOUT : VELA_NPU_ACK_NODAEMON;
@@ -739,9 +796,9 @@ static VKAPI_ATTR void VKAPI_CALL vl_DestroyDevice(VkDevice dev, const VkAllocat
     for (int i = 0; i < NSLOT; i++) { put_done(d, i); if (d->slots[i].e2) d->SetEvent(dev, d->slots[i].e2); }  // release any GPU wait still pending
     line_l4(d); line_bw(d); line_slow(d);
     vlog("stats dev %p: markers %ld (record mean %.4f max %.3f ms) | jobs %ld ok %ld | E1 timeouts %ld, NPU errors %ld, no-daemon %ld, forced releases %ld, reconnects %ld | "
-         "submit->E1 seen mean %.3f max %.3f ms | kick->done mean %.3f max %.3f ms", (void*)dev, d->markers, d->markers ? d->sumRec / d->markers : 0, d->maxRec,
+         "submit->E1 seen mean %.3f max %.3f ms | kick->done mean %.3f max %.3f ms | retired sets freed early %ld, left %zu", (void*)dev, d->markers, d->markers ? d->sumRec / d->markers : 0, d->maxRec,
          d->jobs, d->okJobs, d->e1Timeouts, d->npuErrors, d->noDaemon, d->forced, d->reconnects,
-         d->okJobs ? d->sumE1 / d->okJobs : 0, d->maxE1, d->okJobs ? d->sumNpu / d->okJobs : 0, d->maxNpu);
+         d->okJobs ? d->sumE1 / d->okJobs : 0, d->maxE1, d->okJobs ? d->sumNpu / d->okJobs : 0, d->maxNpu, d->retFreed, d->retired.size());
   }
   if (d->DeviceWaitIdle) d->DeviceWaitIdle(dev);
   for (Slot& s : d->slots) { if (s.e1) d->DestroyEvent(dev, s.e1, nullptr); if (s.e2) d->DestroyEvent(dev, s.e2, nullptr); }

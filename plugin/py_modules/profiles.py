@@ -17,8 +17,10 @@ player's own choice in the panel stays: the profile only changes the defaults an
   smooth the "smoothing" the panel picks first (BMI: "sharp", a wider kernel loses 0.5 dB to DLSS M there)
   hint   a line for the panel under the mode text (a game setting worth changing, e.g. RE4's Ambient Occlusion)
   ini    OptiScaler.ini keys for the game, {("Section", "Key"): "value"}, applied after sgsr3.ini_values()
-         (Cyberpunk: upstream's own Dxgi=false, see the Cyberpunk 2077 profile below)
+         (Cyberpunk: upstream's own Dxgi=false; Control: Dxgi=true over its upstream quirk). A profile "ini" wins over the
+         dxgi_quirks.py mirror (games whose OptiScaler quirk turns DXGI spoofing off get Dxgi=false)
 """
+import os
 
 LINES_ENV = "OPTI_SGSR3_LINES=2"
 NOLOCK_ENV = "OPTI_SGSR3_NOLOCK=1"
@@ -29,8 +31,8 @@ EXTRA_ENV_TOKENS = ("VKD3D_SHADER_MODEL=6_6", "VKD3D_FEATURE_LEVEL=12_2", "VKD3D
 PROFILES = {
     # Bright Memory: Infinite: thin HUD lines and text gain from the lower threshold; the student model loses to v1f there
     # (-0.6...-1.5 dB on this game)
-    "1178830": {"name": "Bright Memory: Infinite", "lines": 2, "algo": "v1f", "smooth": "sharp",
-                "note": "Vela SR instead of Vela AI (0.6-1.5 dB better), line threshold 2, «Sharp»"},
+    # note (NOMSG 2026-11-11: no game-specific message in the plugin): Vela SR instead of Vela AI (0.6-1.5 dB better), line threshold 2, «Sharp»
+    "1178830": {"name": "Bright Memory: Infinite", "lines": 2, "algo": "v1f", "smooth": "sharp"},
     # Control: the HUD locks cost v1f 0.26 / 0.15 dB to DLSS M (0.18 / 0.19 in motion; whitish spots and halo).
     # Its input: RGBA16F with the game's HDR on, R10G10B10A2 (shadows already 10-bit) with it off.
     # + SQ (sqrt storage of the working colour and history): GPU replay of Control 540p / 480p
@@ -45,34 +47,35 @@ PROFILES = {
     # screen since 0.8.15, so the game's output follows it, and a render = the full output (no upscaling) becomes 960x540
     # (FSR 4 Performance, the size Control ran FSR 4 at before); a smaller render stays (the console's
     # 1280x720 is then FSR 4 Quality 1.5x at the 1080p output)
-    "870780": {"name": "Control", "nolock": True, "env": ["OPTI_SGSR3_SQ=1"],
+    # Dxgi=true kept although upstream's control_dx12.exe quirk turns spoofing off (dxgi_quirks.py): Control runs with
+    # true today and is not tested on the console (lead 2026-11-09)
+    # note (NOMSG 2026-11-11: no game-specific message in the plugin): the game's HDR on (shadows flicker 2-3 times less), no HUD line locks, dark tones in sqrt encoding
+    "870780": {"name": "Control", "nolock": True, "env": ["OPTI_SGSR3_SQ=1"], "ini": {("Spoofing", "Dxgi"): "true"},
                "game_cfg": {"file": "renderer.ini",
                             "keys": {"m_eAllowHDR": 1, "m_iOutputResolutionX": 1920, "m_iOutputResolutionY": 1080,
                                      "m_iRenderResolutionX": 960, "m_iRenderResolutionY": 540},
                             # 1280x720 too -- the render the game writes itself after a 720p window
                             # (renderer.ini rewritten by the game to 1280x720 / 1280x720, FSR 4 context
                             # 1280x720 -> 1280x720, nothing upscaled); 960x540 -> 1920x1080 is the intended case
-                            "when": {"m_iRenderResolutionX": [1920, 1280], "m_iRenderResolutionY": [1080, 720]}},
-               "note": "the game's HDR on (shadows flicker 2-3 times less), no HUD line locks, dark tones in sqrt encoding"},
+                            "when": {"m_iRenderResolutionX": [1920, 1280], "m_iRenderResolutionY": [1080, 720]}}},
     # Manor Lords: its upscaler input is FSR 3.1 / DLSS (UE5)
     # DX12 under vkd3d-proton needs shader model 6.6 / feature level 12_2 or the game says "DX12 is not supported";
     # the game's anti-aliasing must be FSR 3.1 (DLSS does not work there).
     # Vela AI knobs per game (alphaK 0.75, mk 4) were dropped in 0.4.11: one Vela AI for all games with amax 0.6.
-    "1363080": {"name": "Manor Lords", "env": ["VKD3D_SHADER_MODEL=6_6", "VKD3D_FEATURE_LEVEL=12_2"],
-                "note": "choose FSR anti-aliasing in the game"},
+    # note (NOMSG 2026-11-11: no game-specific message in the plugin): choose FSR anti-aliasing in the game
+    "1363080": {"name": "Manor Lords", "env": ["VKD3D_SHADER_MODEL=6_6", "VKD3D_FEATURE_LEVEL=12_2"]},
     # Resident Evil 4 (0.4.7): its FSR 2 is built into re4.exe -- our interceptor replaces it
     # by Vela AI (Vela SR shows fireflies there); the game's FSR 2 must be on (any mode: it sets the render size)
     # amax 0.6 comes as for every game (sgsr3.AMAX -> VELA_AMAX). The interceptor's VELA_SKIP_SDF is not offered: the
     # game's own Ambient Occlusion = Off turns the same Global Distance Field pass off (title 14.5 -> 39 FPS)
     # 0.8.16: the interceptor needs the game's FSR 2 on; local_config.ini [AppRender] AppUpScalingTypeFSR2 (default 0 =
     # off, local_config_default.ini); 3 gave 640x360 -> 1280x720 = 2.0x (Performance) on the console
+    # note (NOMSG 2026-11-11: no game-specific message in the plugin): turn FSR 2 on in the game (any mode), Vela replaces it
+    # hint (NOMSG 2026-11-11: no game-specific message in the plugin): For FPS turn Ambient Occlusion off in the game (about 2.5 times faster). Less noise: FSR 2 «Performance» in the game (960×540)
     "2050650": {"name": "Resident Evil 4", "static_fsr2": {"algo": "ai", "env": ["VELA_RCAS=0"]},
                 "game_cfg": {"file": "local_config.ini", "format": "ini", "section": "AppRender",
                              "keys": {"AppUpScalingTypeFSR2": 3}, "when": {"AppUpScalingTypeFSR2": [0]}},
-                # 0.4.15: x2 (FSR 2 "Performance", 960x540) instead of the user's x3 (Ultra Performance) -- less grain
-                "hint": "For FPS turn Ambient Occlusion off in the game (about 2.5 times faster). "
-                        "Less noise: FSR 2 «Performance» in the game (960×540)",
-                "note": "turn FSR 2 on in the game (any mode), Vela replaces it"},
+                },
     # 0.8.16: Ghostrunner's own settings had DLSS off (GameUserSettings.ini in the prefix: DLSSEnabled=False, DLSSMode=0);
     # with DLSS off the game never calls an upscaler and Vela gets no frame. DLSSMode is the UE DLSS plugin's UDLSSMode
     # (exe strings in this order: Off, Auto, UltraQuality, Quality, Balanced, Performance, UltraPerformance -> 5 = Performance);
@@ -87,10 +90,16 @@ PROFILES = {
     # 0.8.16: DRG's own upscaler setting is FSD/Saved/Config/WindowsNoEditor/GameUserSettings.ini in the game folder,
     # UpscalingType=0 (off) on the console; 3 = FSR 2 (the log then shows "ffxFsr2ContextCreate_Dx12 context created",
     # then "Vela FSR 4 VK ... 1130x636 -> 1920x1080", LowResMV true); only when it is off, the player's choice stays
-    "548430": {"name": "Deep Rock Galactic", "lines": 4, "note": "line threshold 4 (Vela SR)",
+    # DX12O (2026-11-11): the kit runs only on DX12: Steam's default entry starts the game on D3D11, and there the game's FSR 2
+    # (UpscalingType=3) calls the kit's FSR 2 DX12 entry -> 'D3D12 device not found' -> crash at engine frame 4 (3 of 3 on the console).
+    # vela-launch adds -dx12 when the game's command has no API flag and leaves the kit out when it has -dx11 (launch.json "dx12_only").
+    # note (NOMSG 2026-11-11: no game-specific message in the plugin): line threshold 4 (Vela SR)
+    "548430": {"name": "Deep Rock Galactic", "lines": 4, "dx12_only": True,
                "game_cfg": {"file": "FSD/Saved/Config/WindowsNoEditor/GameUserSettings.ini", "format": "ini",
                             "section": "/Script/FSD.FSDGameUserSettings",
-                            "keys": {"UpscalingType": 3}, "when": {"UpscalingType": [0]}}},
+                            "keys": {"UpscalingType": 3}, "when": {"UpscalingType": [0]},
+                            # FLW (BOARD row 57): started with UpscalingType=3 the game itself sets these two (FSR 2 needs TAA); Off puts them back
+                            "follow": {"AntiAliasingType": [2], "TemporalAAUpsamplingEnabled": ["True"]}}},
     # Cyberpunk 2077: with DXGI spoofing the game sees "NVIDIA GeForce RTX 4090" and the Adreno
     # hangs (hangcheck, vkd3d_queue) 2-6 s after the intro; upstream OptiScaler turns DXGI spoofing off for this exe
     # (Streamline spoofing alone opens DLSS); FSR 3.1 / XeSS inputs need no spoofing.
@@ -98,13 +107,49 @@ PROFILES = {
     # WITHOUT Vela too (Turnip + vkd3d-proton of Proton 11 ARM64); VKD3D_CONFIG=no_upload_hvv (UPLOAD heap not in host-visible
     # VRAM) reached the title screen and held 150 s. Proton appends its own
     # force_bindless_texel_buffer for this game to VKD3D_CONFIG, so ours is kept next to it.
-    "1091500": {"name": "Cyberpunk 2077", "ini": {("Spoofing", "Dxgi"): "false"}, "env": ["VKD3D_CONFIG=no_upload_hvv"],
-                "note": "no GPU spoofing (as OptiScaler does for this game)"},
+    # note (NOMSG 2026-11-11: no game-specific message in the plugin): no GPU spoofing (as OptiScaler does for this game)
+    "1091500": {"name": "Cyberpunk 2077", "ini": {("Spoofing", "Dxgi"): "false"}, "env": ["VKD3D_CONFIG=no_upload_hvv"]},
+    # Returnal (UE4, -dx12, DLSS / XeSS inputs): upstream OptiScaler's quirk turns DXGI spoofing off ("no spoof needed for DLSS
+    # inputs, but no DLSSG and Reflex"); our explicit Dxgi=true reset that quirk, the game took its Streamline DLSS-G / Reflex path
+    # and died ~25 s after its swap chain, before any upscaler call (report 9NPQFQ, AYN Odin 3, 0.8.21). No env: nothing else known.
+    # note (NOMSG 2026-11-11: no game-specific message in the plugin): no GPU spoofing (as OptiScaler does for this game)
+    "1649240": {"name": "Returnal", "ini": {("Spoofing", "Dxgi"): "false"}},
 }
 
 
+# 0.8.22: the game's exe as Vela's scan picks it (sgsr3.pick_exe), lowercase, read on the console 2026-11-06 (SC1). A
+# non-Steam shortcut of the same game (a GOG or Epic copy) gets the Steam game's profile through it: its appid is the
+# shortcut's own, so without this a shortcut of Manor Lords got no VKD3D shader model and the game said "DX12 is not
+# supported" (console, SC1).
+EXES = {
+    "brightmemoryinfinite-win64-shipping.exe": "1178830",
+    "control_dx12.exe": "870780", "control_dx11.exe": "870780",
+    "manorlords-win64-shipping.exe": "1363080",
+    "re4.exe": "2050650",
+    "ghostrunner-win64-shipping.exe": "1139900",
+    "fsd-win64-shipping.exe": "548430",
+    "cyberpunk2077.exe": "1091500",
+    "returnal-win64-shipping.exe": "1649240",
+}
+_SHORTCUTS = {}  # shortcut appid -> the Steam appid whose profile it uses (set by every scan of the shortcut)
+
+
+def link_shortcut(appid, exe):
+    """The scan of a non-Steam shortcut found this exe: the shortcut uses that game's profile, or none."""
+    steam = EXES.get(os.path.basename(exe or "").lower())
+    if steam and steam in PROFILES:
+        _SHORTCUTS[str(appid)] = steam
+    else:
+        _SHORTCUTS.pop(str(appid), None)
+
+
+def key(appid):
+    """The appid the profile is kept under: a Steam game's own, a linked shortcut's game's."""
+    return _SHORTCUTS.get(str(appid), str(appid))
+
+
 def profile(appid):
-    return PROFILES.get(str(appid))
+    return PROFILES.get(key(appid))
 
 
 def public(appid):
@@ -136,6 +181,11 @@ def defaults(appid):
 def static_fsr2(appid):
     """{"algo": "ai" | "sr", "env": [...]} for games whose FSR 2 is built into the exe (our interceptor), else None."""
     return (profile(appid) or {}).get("static_fsr2")
+
+
+def dx12_only(appid):
+    """DX12O: the game's kit runs only on DX12 (vela-launch: -dx12 when the command has no API flag, no kit with -dx11)."""
+    return bool((profile(appid) or {}).get("dx12_only"))
 
 
 def game_cfg(appid):

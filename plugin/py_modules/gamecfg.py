@@ -19,6 +19,7 @@ Games write their settings when they quit, so with the game running the write wa
 """
 import json
 import os
+import stat
 import re
 
 
@@ -88,9 +89,15 @@ def _str(v):
     return ("true" if v else "false") if isinstance(v, bool) else str(v)
 
 
-def prefix_user(install_dir, appid):
-    """The Proton prefix's user folder of the game: <library>/steamapps/compatdata/<appid>/pfx/drive_c/users/steamuser."""
-    steamapps = os.path.dirname(os.path.dirname(os.path.normpath(install_dir)))  # <library>/steamapps/common/<dir>
+def prefix_user(install_dir, appid, home=None):
+    """The Proton prefix's user folder of the game: <library>/steamapps/compatdata/<appid>/pfx/drive_c/users/steamuser.
+    0.8.22: a non-Steam shortcut's folder is anywhere (not <library>/steamapps/common/<dir>); Steam makes its prefix in
+    the main library, <home>/.local/share/Steam/steamapps/compatdata/<appid> (seen on the console, SC1)."""
+    common = os.path.dirname(os.path.normpath(install_dir))
+    if os.path.basename(common) == "common" or not home:
+        steamapps = os.path.dirname(common)  # <library>/steamapps/common/<dir>
+    else:
+        steamapps = os.path.join(home, ".local", "share", "Steam", "steamapps")
     return os.path.join(steamapps, "compatdata", str(appid), "pfx", "drive_c", "users", "steamuser")
 
 
@@ -102,9 +109,10 @@ def entries(cfg):
 
 
 class GameCfg:
-    def __init__(self, settings_dir, log=print):
+    def __init__(self, settings_dir, log=print, home=None):
         self.dir = os.path.join(settings_dir, "gamecfg")
         self.log = log
+        self.home = home
 
     def _path(self, appid):
         return os.path.join(self.dir, f"{appid}.json")
@@ -134,9 +142,8 @@ class GameCfg:
         except OSError:
             pass
 
-    @staticmethod
-    def _resolve(appid, install_dir, e):
-        root = prefix_user(install_dir, appid) if e.get("root") == "prefix" else install_dir
+    def _resolve(self, appid, install_dir, e):
+        root = prefix_user(install_dir, appid, getattr(self, "home", None)) if e.get("root") == "prefix" else install_dir
         return os.path.join(root, e["file"])
 
     @staticmethod
@@ -153,6 +160,7 @@ class GameCfg:
             return {**f, "skipped": True}
         ini = f.get("format") == "ini"
         orig = dict(f.get("orig") or {})
+        had = bool(orig)
         new = text
         for k, v in (f.get("want") or {}).items():
             cur = ini_get(new, f["section"], k) if ini else get_key(new, k)
@@ -165,17 +173,48 @@ class GameCfg:
                 if k not in orig:
                     orig[k] = cur
             new, _ = ini_set(new, f["section"], k, v) if ini else set_key(new, k, v)
+        # FLW (BOARD row 57, 2026-11-10): "follow" = keys the GAME rewrites on its own once Vela's key is in, with the values it gives them
+        # (Deep Rock Galactic with UpscalingType=3: AntiAliasingType 1 -> 2, TemporalAAUpsamplingEnabled False -> True; Off put back only
+        # Vela's key and the player's anti-aliasing stayed changed, FIN3 2026-11-03). Their values are noted in the pass that takes Vela's
+        # first key (never later: by then the game may have rewritten them); Off puts a key back only when it holds one of the game's
+        # values and held another before, so a value the player picked himself meanwhile stays.
+        follow = f.get("follow") or {}
+        ofollow = dict(f.get("orig_follow") or {})
+        if follow and not restore and orig and not had and not ofollow:
+            for k in follow:
+                cur = ini_get(text, f["section"], k) if ini else get_key(text, k)
+                if cur is not None:
+                    ofollow[k] = cur
+        if follow and restore and orig:
+            for k, was in ofollow.items():
+                cur = ini_get(new, f["section"], k) if ini else get_key(new, k)
+                gives = [_str(x).lower() for x in (follow.get(k) or [])]
+                if cur is not None and _str(cur).lower() in gives and _str(cur).lower() != _str(was).lower():
+                    new, _ = ini_set(new, f["section"], k, was) if ini else set_key(new, k, was)
         if new != text:
+            # V19 (audit 2026-11-09): the new file keeps the old one's permissions. A rename ignores the target's mode, so a
+            # settings file the player made read-only (to keep his tweaks) came back writable and the game rewrote it at exit
+            mode = stat.S_IMODE(os.stat(path).st_mode)
             tmp = path + ".vela-tmp"
             with open(tmp, "w", encoding="utf-8", newline="") as fh:
                 fh.write(new)
-            os.replace(tmp, path)
-        return {**f, "orig": orig}
+            os.chmod(tmp, mode)
+            try:
+                os.replace(tmp, path)
+            except PermissionError:   # Windows: a read-only target cannot be replaced; the new file already carries its mode
+                os.chmod(path, mode | stat.S_IWRITE)
+                os.replace(tmp, path)
+        return {**f, "orig": orig, "orig_follow": ofollow} if follow else {**f, "orig": orig}
 
     def _files(self, appid, install_dir, cfg):
-        return [{"path": self._resolve(appid, install_dir, e), "format": e.get("format", "json"),
+        out = []
+        for e in entries(cfg):
+            f = {"path": self._resolve(appid, install_dir, e), "format": e.get("format", "json"),
                  "section": e.get("section"), "want": dict(e["keys"]), "when": dict(e.get("when") or {}), "orig": {}}
-                for e in entries(cfg)]
+            if e.get("follow"):  # FLW: only profiles that have it carry the field, so the state of every other game stays as it was
+                f["follow"] = {k: list(v) for k, v in e["follow"].items()}
+            out.append(f)
+        return out
 
     def enable(self, appid, install_dir, cfg, running):
         """cfg: the profile's game_cfg (one entry or a list). The original values a file had before Vela stay from the first
@@ -189,6 +228,8 @@ class GameCfg:
             prev = old.get(f["path"])
             if prev:
                 f["orig"] = {k: v for k, v in (prev.get("orig") or {}).items() if k in f["want"]}
+                if f.get("follow") and prev.get("orig_follow"):
+                    f["orig_follow"] = {k: v for k, v in prev["orig_follow"].items() if k in f["follow"]}
             files.append(f)
         self._write(appid, {"files": files, "pending": True, "off": False})
         self.reconcile(set() if not running else {appid}, only=appid)
@@ -200,7 +241,7 @@ class GameCfg:
         if not cfg or not install_dir:
             return self.status(appid)
         st = self.read(appid)
-        want = [(f["path"], f["section"], f["want"], f["when"]) for f in self._files(appid, install_dir, cfg)]
+        want = [(f["path"], f["section"], f["want"], f["when"]) for f in self._files(appid, install_dir, cfg)]  # FLW: "follow" is not compared
         have = [(f["path"], f.get("section"), f.get("want"), f.get("when") or {}) for f in (st or {}).get("files", [])]
         if st and not st.get("off") and want == have:
             return self.status(appid)

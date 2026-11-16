@@ -19,7 +19,9 @@ ASSETS = ["assets/sgsr3/OptiScaler.dll", "assets/sgsr3/OptiScaler.ini", "assets/
           "assets/licenses/README.txt", "assets/licenses/OptiScaler-GPL-3.0.txt"]
 # 0.8.13: the any-game layer (Vela Any, assets/layer) left the plugin; a game that still has it is turned off by the
 # panel (anygame.py disable needs only its own state, not the .so)
-SKIP_DIRS = ("assets/layer",)
+# 0.8.22: FSR 4 for any game: assets/anyfsr4 (layer r8, its manifest, the Vela provider) ships; its pack (fsr411/, 173 MB) is a
+# separate download the plugin fetches once (anyfsr4.fetch_pack), never in this zip
+SKIP_DIRS = ("assets/layer", "assets/anyfsr4")  # NOFG (2026-11-15): the lp0 layer (frame generation) left the plugin
 # 0.8.0: the FSR 4 network on the NPU: our layer VK_LAYER_VELA_npu and its manifest
 NPU_ASSETS = ["assets/npu/libVkLayer_VELA_npu.so", "assets/npu/VkLayer_VELA_npu.json"]
 NPU_LIB = NPU_ASSETS[0]

@@ -40,6 +40,17 @@ def _cmd_index(toks):
     return None
 
 
+def has_cmd(options):
+    """V02 (audit 2026-11-09): the options name %command% anywhere, also inside a quoted or compound token."""
+    return CMD in (options or "")
+
+
+def wrapped_cmd(options):
+    """V02: %command% stands only inside another token ("%command%", $( echo "%command%" | sed ... ), a launcher-skip
+    recipe): it is there, so none is added, and a wrapper cannot be put in front of the shell command around it."""
+    return has_cmd(options) and CMD not in words(options)
+
+
 def empty_record():
     return {"env": [], "args": [], "cmd": False}
 
@@ -65,13 +76,18 @@ def add(options, env=(), args=()):
     the game gets the same arguments). None counts as no options."""
     s = options or ""
     rec = empty_record()
-    if CMD not in words(s):
+    if not has_cmd(s):  # V02: a quoted "%command%" counted as none and a second one went in front (the game may not start)
         s = CMD + (" " + s if s.strip() else "")
         rec["cmd"] = True
     toks = tokens(s)
     ci = _cmd_index(toks)
-    before = [t for t, _, _ in toks[:ci]]
-    after = [t for t, _, _ in toks[ci + 1:]]
+    if ci is None:  # V02: %command% inside other tokens: "before" ends at the first of them, "after" starts past the last
+        hold = [i for i, (t, _, _) in enumerate(toks) if CMD in t]
+        before = [t for t, _, _ in toks[:hold[0]]]
+        after = [t for t, _, _ in toks[hold[-1] + 1:]]
+    else:
+        before = [t for t, _, _ in toks[:ci]]
+        after = [t for t, _, _ in toks[ci + 1:]]
     names = {env_name(t) for t in before} - {None}
     front = []
     for tok in env:

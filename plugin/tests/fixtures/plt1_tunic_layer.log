@@ -1,0 +1,321 @@
+# PL2 fixture: C:/src/ext/fsr4r/PLT1/console_out/run_tunic_130740/layer.log (11891 lines), every line except the per-frame kinds (CAM CAMSUM CAMPAIRS DEPTHS PROBE MVC UMISS UWHY JC HEAPK COV), of which the first 12 of each are kept; dropped: {'DEPTHS': 249, 'CAM': 5300, 'COV heap:': 6, 'CAMSUM': 5298, 'HEAPK': 6, 'JC': 29, 'PROBE': 111, 'MVC': 422, 'UMISS': 75, 'UWHY': 75}
+tup: instance created (app ?, engine ? 0x0, api 0x0)
+tup: LP: descriptor buffer/heap extensions shown (LP0_HIDE_DB -1, engine DXVK/vkd3d 0)
+tup: instance created (app Tunic.exe, engine DXVK 0xc00000, api 0x403000)
+tup: LP: descriptor buffer/heap extensions hidden (LP0_HIDE_DB -1, engine DXVK/vkd3d 1)
+tup: instance created (app ?, engine ? 0x0, api 0x0)
+tup: LP: device features the driver does not have, left off: uniformAndStorageBuffer8BitAccess uniformAndStorageBuffer16BitAccess
+tup: lp0: device 0xaaaad9def180, cam tracker on, hide_db -1, descriptor_buffer not enabled; descriptor-related extensions: VK_KHR_maintenance5 VK_KHR_maintenance6 VK_KHR_swapchain_maintenance1 
+tup: device created: Turnip Adreno (TM) 740, timestampPeriod 52.083 ns, 2 queue families
+tup: LP: mip bias 0.00 (auto, LP_BIG) on sampler #1: mag 1 min 1 mip 1 addr 2 2 2 aniso 0 0 lod 0.0..16.0 own bias 0.00
+tup: LP: device features the driver does not have, left off: uniformAndStorageBuffer8BitAccess uniformAndStorageBuffer16BitAccess
+tup: lp0: device 0xaaaada186d40, cam tracker on, hide_db -1, descriptor_buffer not enabled; descriptor-related extensions: VK_KHR_maintenance5 VK_KHR_maintenance6 VK_KHR_swapchain_maintenance1 
+tup: device created: Turnip Adreno (TM) 740, timestampPeriod 52.083 ns, 2 queue families
+tup: LP: mip bias 0.00 (auto, LP_BIG) on sampler #2: mag 1 min 1 mip 1 addr 2 2 2 aniso 0 0 lod 0.0..16.0 own bias 0.00
+tup: LP: mip bias 0.00 (auto, LP_BIG) on sampler #3: mag 1 min 1 mip 0 addr 2 2 2 aniso 0 0 lod 0.0..0.0 own bias 0.00
+tup: LP: mip bias 0.00 (auto, LP_BIG) on sampler #4: mag 1 min 1 mip 0 addr 3 3 3 aniso 0 0 lod 0.0..0.0 own bias 0.00
+tup: LP jitter: 8 phases (TUP_JITTER_PHASES; render 0x0, output 1920x1080)
+tup: LP: mip bias 0.00 (auto, LP_BIG) on sampler #5: mag 1 min 1 mip 0 addr 0 0 0 aniso 0 0 lod 0.0..16.0 own bias 0.00
+tup: LP: mip bias -2.00 (auto, LP_BIG) on sampler #6: mag 1 min 1 mip 1 addr 2 2 0 aniso 1 9 lod 0.0..16.0 own bias -0.50
+tup: LP: mip bias -2.00 (auto, LP_BIG) on sampler #7: mag 1 min 1 mip 1 addr 2 2 2 aniso 1 16 lod 0.0..16.0 own bias -0.50
+tup: LP: mip bias 0.00 (auto, LP_BIG) on sampler #8: mag 1 min 1 mip 0 addr 2 2 2 aniso 0 0 lod 0.0..16.0 own bias 0.00
+tup: upscale: surface caps current 640x360, min 1x1, max 16384x16384, usage 0x8009f
+tup: upscale: game swapchain 640x360 -> real 1920x1080
+tup: LP chain create: device 0xaaaad9def180 surface 0xaaaada34fa30 old (nil) real 1920x1080 -> 0xffff8802c6a0, result 0, live 0
+tup: swapchain 640x360 format 37 usage 0x12 present mode 2
+tup: BENCH: live file /tmp/vela-live/lp_553420.ini
+tup: DEPTHS f=0 fast=0 sec_retag 0 cost us/frame: submit 0.0 end 0.0 (25 submits, frames 0) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 1 | uses 4/0/1 | slices 5] [640x360 fmt 130 draws 2 MAIN keys ubo 8 ssbo 0 pc 1 | uses 8/0/2 | slices 10]
+tup: CAM f=0 ok=1 depth=640x360 fmt=130 draws=2 top=s15.b0.224 x1 cands=15 search=1 learn=1 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=-1.000e+00 fwd=0.0000 rule=vp votes=3/1 why=-
+tup: CAMPAIRS f=0 n=17 0:P=s2.b2.368+80,V=s2.b2.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 1:P=s2.b2.368+80,V=s2.b2.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-2,n1 2:P=s2.b2.368+80,V=s2.b1.176+0,k1,c1,ortho,asp1.778,PIXEL,sc-6,n1 3:P=s2.b2.368+80,V=s2.b3.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 4:P=s2.b2.368+80,V=s2.b3.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 5:P=s2.b2.368+272,V=s2.b2.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-2,n1 6:P=s2.b2.368+272,V=s2.b1.176+0,k1,c1,ortho,asp1.778,PIXEL,sc-6,n1 7:P=s2.b2.368+272,V=s2.b3.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 8:P=s2.b2.368+272,V=s2.b3.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 9:P=s2.b3.368+80,V=s2.b3.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-2,n1 10:P=s2.b3.368+80,V=s2.b2.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 11:P=s2.b3.368+80,V=s2.b2.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 12:P=s2.b3.368+80,V=s2.b1.176+0,k1,c1,ortho,asp1.778,PIXEL,sc-6,n1 13:P=s2.b3.368+272,V=s2.b3.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-2,n1 14:P=s2.b3.368+272,V=s2.b2.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 15:P=s2.b3.368+272,V=s2.b2.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1
+tup: CAM layout learned at f=0: P in set 2 binding 2 (block 368 B) +0, VP in set 2 binding 2 (block 368 B) +80, row-major
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: CAMSUM f=0 found 1/1 searches 1 relearn 0 vp_moves 0/0 | sets_written 24 templ 1 push 0 binds 17 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 9 m6 0 | tracked mem 11 bufs 11 sets 16 templs 14
+tup: 2D: ready, FSR 1 EASU + RCAS, 640x360 -> 1920x1080, view format 37, sharp con 0.500 step 1
+tup: 2D: 1 frames upscaled, 640x360 -> 1920x1080 at 0,0
+tup: upscale: first present scaled (image 0)
+tup: upscale: present returned VkResult -1000001004 (1 so far), reported as SUCCESS
+tup: CAM f=1 ok=1 depth=640x360 fmt=130 draws=2 top=s2.b2.368 x1 cands=12 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=1 found 2/2 searches 1 relearn 0 vp_moves 0/1 | sets_written 24 templ 2 push 0 binds 18 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 10 m6 0 | tracked mem 11 bufs 11 sets 17 templs 14
+tup: upscale: present returned VkResult -1000001004 (2 so far), reported as SUCCESS
+tup: LP: mip bias -2.58 (auto, swap chain) on sampler #9: mag 1 min 1 mip 1 addr 2 2 0 aniso 1 9 lod 0.0..16.0 own bias 0.00
+tup: CAM f=2 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=2 found 3/3 searches 1 relearn 0 vp_moves 0/2 | sets_written 136 templ 3 push 0 binds 76 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 38 m6 0 | tracked mem 12 bufs 12 sets 74 templs 18
+tup: frame 2: selected depth #6 640x360 D32FS8, standard Z (draws 1, verts 6)
+tup: upscale: present returned VkResult -1000001004 (3 so far), reported as SUCCESS
+tup: LP fetch f=3 pipe 0xffff840e1750 target #25 fmt 43 640x360 reads 1.0 #4 fmt 37 640x360 post 0 late 1 standin 0
+tup: CAM f=3 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=3 found 4/4 searches 1 relearn 0 vp_moves 0/3 | sets_written 212 templ 4 push 0 binds 125 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 63 m6 0 | tracked mem 12 bufs 12 sets 122 templs 18
+tup: upscale: present returned VkResult -1000001004 (4 so far), reported as SUCCESS
+tup: CAM f=4 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=4 found 5/5 searches 1 relearn 0 vp_moves 0/4 | sets_written 288 templ 5 push 0 binds 174 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 88 m6 0 | tracked mem 12 bufs 12 sets 170 templs 18
+tup: frame 4: selected depth #31 640x360 D32FS8, reversed Z (draws 4, verts 24)
+tup: upscale: present returned VkResult -1000001004 (5 so far), reported as SUCCESS
+tup: CAM f=5 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=5 found 6/6 searches 1 relearn 0 vp_moves 0/5 | sets_written 364 templ 6 push 0 binds 223 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 113 m6 0 | tracked mem 12 bufs 12 sets 218 templs 18
+tup: DEPTHS f=6 fast=0 sec_retag 0 cost us/frame: submit 39.2 end 108.5 (64 submits, frames 6) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: CAM f=6 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=6 found 7/7 searches 1 relearn 0 vp_moves 0/6 | sets_written 440 templ 7 push 0 binds 272 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 138 m6 0 | tracked mem 12 bufs 12 sets 266 templs 18
+tup: DEPTHS f=7 fast=0 sec_retag 0 cost us/frame: submit 35.6 end 114.7 (68 submits, frames 7) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: HEAPK f=7 cbvs 76 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 21 VP 0 lock 0 hlock t0 k0 c0 |
+tup: CAM f=7 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=7 found 8/8 searches 1 relearn 0 vp_moves 0/7 | sets_written 516 templ 8 push 0 binds 321 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 163 m6 0 | tracked mem 12 bufs 12 sets 314 templs 18
+tup: CAM f=8 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=8 found 9/9 searches 1 relearn 0 vp_moves 0/8 | sets_written 592 templ 9 push 0 binds 370 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 188 m6 0 | tracked mem 12 bufs 12 sets 362 templs 18
+tup: CAM f=9 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=9 found 10/10 searches 1 relearn 0 vp_moves 0/9 | sets_written 668 templ 10 push 0 binds 419 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 213 m6 0 | tracked mem 12 bufs 12 sets 410 templs 18
+tup: CAM f=10 ok=1 depth=640x360 fmt=130 draws=4 top=s2.b1.144 x2 cands=17 search=0 learn=0 P=s2.b2.368+0 V=s2.b2.368+80 col=0 vpchg=0.000e+00 fwd=0.0000 rule=vp votes=0/0 why=-
+tup: CAMSUM f=10 found 11/11 searches 1 relearn 0 vp_moves 0/10 | sets_written 744 templ 11 push 0 binds 468 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 238 m6 0 | tracked mem 12 bufs 12 sets 458 templs 18
+tup: JC f=7 cands 5 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: PROBE f=7 at=10 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=1,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.0 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: CAMSUM f=11 found 12/12 searches 1 relearn 0 vp_moves 0/11 | sets_written 820 templ 12 push 0 binds 517 upd 0 copies 0 unmapped 0 db_binds 0 pc_calls 263 m6 0 | tracked mem 12 bufs 12 sets 506 templs 18
+tup: DEPTHS f=36 fast=0 sec_retag 0 cost us/frame: submit 20.8 end 91.6 (184 submits, frames 36) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: DEPTHS f=38 fast=0 sec_retag 0 cost us/frame: submit 20.3 end 90.7 (192 submits, frames 38) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: PROBE f=38 at=41 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.0 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: DEPTHS f=66 fast=0 sec_retag 0 cost us/frame: submit 19.0 end 78.2 (304 submits, frames 66) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: DEPTHS f=68 fast=0 sec_retag 0 cost us/frame: submit 19.4 end 93.4 (312 submits, frames 68) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: JC f=68 cands 5 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: PROBE f=68 at=71 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.0 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: DEPTHS f=85 fast=0 sec_retag 0 cost us/frame: submit 19.0 end 100.1 (380 submits, frames 85) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: DEPTHS f=87 fast=0 sec_retag 0 cost us/frame: submit 19.2 end 101.0 (388 submits, frames 87) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: PROBE f=87 at=90 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.0 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: DEPTHS f=115 fast=0 sec_retag 0 cost us/frame: submit 20.5 end 97.1 (500 submits, frames 115) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: DEPTHS f=117 fast=0 sec_retag 0 cost us/frame: submit 20.4 end 97.2 (508 submits, frames 117) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: PROBE f=117 at=120 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.0 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: DEPTHS f=128 fast=0 sec_retag 0 cost us/frame: submit 20.0 end 95.7 (552 submits, frames 128) [640x360 fmt 130 draws 1 keys ubo 4 ssbo 0 pc 0 | uses 4/0/0 | slices 4] [640x360 fmt 130 draws 4 MAIN keys ubo 11 ssbo 0 pc 0 | uses 17/0/0 | slices 13]
+tup: JC f=130 cands 5 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: PROBE f=130 at=133 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.0 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: PROBE f=143 at=146 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.1 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: LP: mip bias -2.58 (auto, swap chain) on sampler #10: mag 1 min 1 mip 1 addr 2 2 2 aniso 1 9 lod 0.0..16.0 own bias 0.00
+tup: PROBE f=174 at=177 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.1 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: PROBE f=185 at=188 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.1 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: JC f=198 cands 5 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: PROBE f=198 at=201 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.02 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.1 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: PROBE f=211 at=214 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.1 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: PROBE f=224 at=227 meas=0.000 (0.000,0.000) tiles=0 geo=0 hole=0 tgeo=0 plane=0,n0,inl0.00,wid0.000,world(0.000,0.000,0.000,0.000) cands=0 moving=0 locked=0 locked_err=-1.000 action=invalid ms=0.01 gap=2,16.6ms quick=0 rej=0,0 prov=0 skipped=0 cpu_total=0.1 motions=0,0 img 640x360 depth 0x0 col#30 fmt91 lum=0.0,0.0 conf=-1.000 edge=0
+tup: JC f=262 cands 5 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: LP STAT f=300 frames 300 runs 0 shown 0 promoted scopes 0 descriptors redirected 0 templates 0 copies 0/0 noinput 0 mv ok 0 nocam 0 cuts 0 fail 0 scene_n 0 locked 0 live_fsr 1 failed 0 pause_until 0 tried 0 colour fills 0 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966881.529 loss 0,0,300,0,0,0,0,0,0,0,0,0,0,0,0 tr 0 trh 0 offb 0,0,0,0,0 hold 0 rep 0 secpromo 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=307 cbvs 122 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 493 VP 0 lock 0 hlock t0 k0 c0 |
+tup: JC f=326 cands 6 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: JC f=388 cands 6 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: JC f=450 cands 6 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: JC f=513 cands 6 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: frame 533: selected depth #6 640x360 D32FS8, standard Z (draws 1, verts 6)
+tup: frame 535: selected depth #51 640x360 D32FS8, reversed Z (draws 2, verts 12)
+tup: LP: mip bias -2.58 (auto, swap chain) on sampler #11: mag 1 min 1 mip 1 addr 2 2 2 aniso 1 16 lod 0.0..16.0 own bias 0.00
+tup: frame 538: selected depth #6 640x360 D32FS8, reversed Z (draws 3, verts 30)
+tup: JC f=574 cands 4 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: LP STAT f=600 frames 600 runs 0 shown 0 promoted scopes 0 descriptors redirected 0 templates 0 copies 0/0 noinput 0 mv ok 0 nocam 0 cuts 0 fail 0 scene_n 0 locked 0 live_fsr 1 failed 0 pause_until 0 tried 0 colour fills 0 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966884.106 loss 0,0,600,0,0,0,0,0,0,0,0,0,0,0,0 tr 0 trh 0 offb 0,0,0,0,0 hold 0 rep 0 secpromo 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=607 cbvs 11 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 973 VP 0 lock 0 hlock t0 k0 c0 |
+tup: JC f=636 cands 4 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: JC f=697 cands 4 with_offset 0 max 0.0000 (+0.0000 +0.0000) id 0 taa 0 of 0
+tup: LP STAT f=900 frames 900 runs 0 shown 0 promoted scopes 0 descriptors redirected 0 templates 0 copies 0/0 noinput 0 mv ok 0 nocam 0 cuts 0 fail 0 scene_n 0 locked 0 live_fsr 1 failed 0 pause_until 0 tried 0 colour fills 0 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966887.164 loss 0,0,900,0,0,0,0,0,0,0,0,0,0,0,0 tr 0 trh 0 offb 0,0,0,0,0 hold 0 rep 0 secpromo 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=907 cbvs 11 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 1133 VP 0 lock 0 hlock t0 k0 c0 |
+tup: upscale: present returned VkResult -1000001004 (1000 so far), reported as SUCCESS
+tup: frame 1129: selected depth #53 640x360 D32FS8, reversed Z (draws 2, verts 12)
+tup: LP: mip bias -2.58 (auto, swap chain) on sampler #12: mag 1 min 1 mip 1 addr 0 0 0 aniso 1 9 lod 0.0..16.0 own bias 0.00
+tup: frame 1136: selected depth #16 640x360 D32FS8, reversed Z (draws 6, verts 6222)
+tup: snapshot image 640x360 D32FS8 created
+tup: LP STAT f=1200 frames 1200 runs 0 shown 0 promoted scopes 0 descriptors redirected 0 templates 0 copies 0/64 noinput 0 mv ok 0 nocam 0 cuts 0 fail 0 scene_n 1 locked 0 live_fsr 1 failed 0 pause_until 0 tried 0 colour fills 0 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966890.011 loss 0,0,1200,0,0,0,0,0,0,0,0,0,0,0,0 tr 0 trh 0 offb 0,0,0,0,0 hold 0 rep 0 secpromo 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=1207 cbvs 163 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 1649 VP 36 lock 0 hlock t0 k0 c0 |
+tup: LP STAT f=1500 frames 1500 runs 0 shown 0 promoted scopes 0 descriptors redirected 0 templates 0 copies 0/364 noinput 0 mv ok 0 nocam 0 cuts 0 fail 0 scene_n 1 locked 0 live_fsr 1 failed 0 pause_until 0 tried 0 colour fills 0 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966892.680 loss 0,0,1500,0,0,0,0,0,0,0,0,0,0,0,0 tr 0 trh 0 offb 0,0,0,0,0 hold 0 rep 0 secpromo 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=1507 cbvs 169 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 2611 VP 110 lock 0 hlock t0 k0 c0 |
+tup: LP FIRE f=1664 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP provider (linux): mode VELA_FAST=1, npu 1 (LP_FAST, LP_NPU)
+tup: LP provider (linux): pipeline threads FSR4_VK_PIPELINE_THREADS=1 (set by the layer)
+tup: LP provider (linux): loaded /var/home/armada/homebrew/plugins/upscale/assets/anyfsr4/libamd_fidelityfx_upscaler_vk.so
+tup: LP provider (linux): loader found libvulkan.so.1
+tup: LP: loader's physical device 0xaaaad9d67cb0 for the layer's 0xaaaad9d0e510: Turnip Adreno (TM) 740 (0 of 2)
+tup: LP: VELANPU1 mode 1
+tup: LP: ffxCreateContext 0, 640x360 -> 1920x1080, 0 ms
+tup: LP: stand-in #1 1920x1080 fmt 97 (game image #15 fmt 91, mutable 1)
+tup: LP GMV source f=1664: ours, no game MVs this frame #0 (TAA 0, pass candidate #0 drawn 0, fit 0 scale 0.00 0.00)
+tup: LP: sharpness 0.50 -> RCAS 0.500, step 2, at f 1664
+tup: FFX(1): Fast 1.5x: Fast UP as P720 + separate 1.5x pass (only when output = 3 x render; off: fastup15=0 / VELA_FAST_UP15=0), mode 3
+tup: LP: mip bias 0.00 (auto, swap chain) on sampler #13: mag 1 min 1 mip 1 addr 2 2 2 aniso 0 16 lod 0.0..340282346638528859811704183484516925440.0 own bias 0.00
+tup: LP: first FSR frame f 1664, colour view fmt 97, jitter 0.000 -0.167
+tup: LP jitter: 72 phases (AMD 8 x ratio^2, default (ffxFsr2GetJitterPhaseCount); render 640x360, output 1920x1080)
+tup: LP: stand-in #2 1920x1080 fmt 91 (game image #64 fmt 91, mutable 1)
+tup: LP: stand-in #3 1920x1080 fmt 91 (game image #63 fmt 91, mutable 1)
+tup: LP: stand-in #4 1920x1080 fmt 130 (game image #16 fmt 130, mutable 0)
+tup: LP: post depth slope bias k 1.00, step 3 3, far sign -1, depth fmt 130, f 1664
+tup: LP: stand-in #5 1920x1080 fmt 37 (game image #78 fmt 37, mutable 1)
+tup: LP: stand-in #6 1920x1080 fmt 130 (game image #79 fmt 130, mutable 0)
+tup: LP: stand-in #7 1920x1080 fmt 91 (game image #80 fmt 91, mutable 1)
+tup: LP: stand-in #8 1920x1080 fmt 130 (game image #81 fmt 130, mutable 0)
+tup: LP: stand-in #9 1920x1080 fmt 91 (game image #17 fmt 91, mutable 1)
+tup: LP: stand-in #10 1920x1080 fmt 130 (game image #18 fmt 130, mutable 0)
+tup: LP: stand-in #11 1920x1080 fmt 37 (game image #62 fmt 37, mutable 1)
+tup: LP: stand-in #12 1920x1080 fmt 37 (game image #5 fmt 37, mutable 1)
+tup: LP: stand-in #13 1920x1080 fmt 130 (game image #6 fmt 130, mutable 0)
+tup: LP: stand-in #14 1920x1080 fmt 37 (game image #3 fmt 37, mutable 1)
+tup: LP: pixels without depth: mode 1, plane 1, world 0.743 -0.398 -0.539 26.111, probe err 0.394
+tup: LP: to the swapchain: stand-in fmt 37 (game image fmt 37), swapchain image fmt 37, view fmt 43, scene image fmt 91
+tup: SHRT f=1664 0->1 why -1 off_run 1664 fl_scopes 36
+tup: LP FIRE f=1665 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP LOCK t=1793966894.326 f=1664 state motion, was none; P s2.b2.368+272 V s2.b2.368+272 ft 25.63 ms why=-
+tup: 2D: FSR 4 wrote a frame (1664 2D frames before): off for the session
+tup: LP: scene colour image #15 640x360
+tup: scene colour format 91 (#15, 12456 vertices)
+tup: LP: stand-in #15 1920x1080 fmt 37 (game image #4 fmt 37, mutable 1)
+tup: MVC t=1793966894.329 f=1665 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: LP FIRE f=1666 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP FIRE f=1667 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP FIRE f=1668 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP FIRE f=1669 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP FIRE f=1670 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: FFX(1): Vela NPU: on, exact
+tup: FFX(1): Vela NPU: zero-copy tensors
+tup: LP FIRE f=1671 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP FIRE f=1672 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP FIRE f=1673 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP FIRE f=1674 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: LP FIRE f=1675 in front of #64 depth #0 (scene depth #16): input #15 fmt 97 from_lit 0 dfr 0 scene_n 1 prev 1 fetch 0 prev 0 done 0 last_fetch 0/0 run #15 lit #15 fmt 97
+tup: MVC t=1793966894.735 f=1680 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: UMISS f=1680 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=1680 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: MVC t=1793966895.040 f=1695 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: MVC t=1793966895.354 f=1710 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: MVC t=1793966895.678 f=1725 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: MVC t=1793966895.985 f=1740 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: UMISS f=1740 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=1740 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: MVC t=1793966896.325 f=1755 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: MVC t=1793966896.638 f=1770 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: MVC t=1793966896.944 f=1785 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: LP GPU f=1790 on-frames 120: mv 0.089 fsr 2.955 post+ui@out 16.390 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP STAT f=1800 frames 1800 runs 136 shown 136 promoted scopes 1768 descriptors redirected 1904 templates 136 copies 0/664 noinput 0 mv ok 136 nocam 0 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 136 colour fills 1088 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966897.230 loss 0,0,1664,0,0,0,0,0,0,0,0,0,0,0,0 tr 1 trh 0 offb 0,0,0,0,1 hold 0 rep 0 secpromo 0
+tup: JIT f=1800 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: MVC t=1793966897.257 f=1800 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: UMISS f=1800 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=1800 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: UDIAG f=1800 misses 0: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 0 | hits checked 3, no match 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: JIT f=1801 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: HEAPK f=1807 cbvs 169 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 3001 VP 140 lock 1 hlock t0 k0 c0 |
+tup: MVC t=1793966897.568 f=1815 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: MVC t=1793966897.881 f=1830 center 0.0000 px d05 0.00 d002 0.000 inf 0.000
+tup: UMISS f=1860 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=1860 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: LP GPU f=1910 on-frames 120: mv 0.087 fsr 2.513 post+ui@out 16.320 ms; off-frames 0: post+ui@render 0.000 ms
+tup: UMISS f=1920 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=1920 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: LP GUARD f=1970: pass 0.992 ms (RCAS and guard) over 300 frames; scene peak 11.56; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: UMISS f=1980 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=1980 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: upscale: present returned VkResult -1000001004 (2000 so far), reported as SUCCESS
+tup: LP GPU f=2030 on-frames 120: mv 0.088 fsr 2.542 post+ui@out 16.529 ms; off-frames 0: post+ui@render 0.000 ms
+tup: UMISS f=2040 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=2040 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: LP STAT f=2100 frames 2100 runs 436 shown 436 promoted scopes 5668 descriptors redirected 6104 templates 436 copies 0/964 noinput 0 mv ok 436 nocam 0 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 436 colour fills 3488 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966903.671 loss 0,0,1664,0,0,0,0,0,0,0,0,0,0,0,0 tr 1 trh 0 offb 0,0,0,0,1 hold 0 rep 0 secpromo 0
+tup: UMISS f=2100 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=2100 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: UDIAG f=2100 misses 0: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 0 | hits checked 8, no match 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=2107 cbvs 169 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 3001 VP 140 lock 1 hlock t0 k0 c0 |
+tup: LP GPU f=2150 on-frames 120: mv 0.087 fsr 2.534 post+ui@out 16.391 ms; off-frames 0: post+ui@render 0.000 ms
+tup: UMISS f=2160 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=2160 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: UMISS f=2220 hit cands 6 heap_new 169 copies 0 (added 0) fold mark 0 matches 7: w b4.r368 i4 F0 S0 d- sub?? pc0 w b3.r368 i9 F0 S0 d- sub?? pc0 w b2.r368 i23 F0 S1 d- sub?? pc0 w b7.r368 i28 F0 S1 d- sub?? pc0 w b1.r368 i32 F0 S1 d- sub?? pc0 w b3.r368 i38 F0 S1 d- sub?? pc0
+tup: UWHY f=2220 hit matches 7 fold at main depth: -:7 | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: LP GUARD f=2270: pass 0.986 ms (RCAS and guard) over 300 frames; scene peak 11.48; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: LP GPU f=2270 on-frames 120: mv 0.087 fsr 2.514 post+ui@out 16.322 ms; off-frames 0: post+ui@render 0.000 ms
+tup: UMISS f=2272 MISS cands 2 heap_new 12 copies 0 (added 0) fold mark 0 matches 0:
+tup: UWHY f=2272 MISS matches 0 fold at main depth: | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: UDIAG f=2272 misses 1: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 1 | hits checked 10, no match 0
+tup: frame 2272: selected depth #6 640x360 D32FS8, standard Z (draws 1, verts 6)
+tup: UMISS f=2273 MISS cands 12 heap_new 12 copies 0 (added 0) fold mark 0 matches 0:
+tup: UWHY f=2273 MISS matches 0 fold at main depth: | judged while locked 0: submit camera test pass 0, submit lock test pass 0 | present camera test pass 0 | rescued 0 (sliced 0)
+tup: SHRT f=2274 1->0 why 12 off_run 0 fl_scopes 6
+tup: frame 2274: selected depth #85 640x360 D32FS8, reversed Z (draws 2, verts 12)
+tup: CAMPAIRS f=2301 n=48 0:P=s2.b2.368+80,V=s2.b2.368+144,k1,c1,ortho,asp1.778,PIXEL,sc-2,n1 1:P=s2.b2.368+80,V=s2.b2.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 2:P=s2.b2.368+80,V=s2.b2.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-2,n1 3:P=s2.b2.368+80,V=s2.b1.176+0,k1,c1,ortho,asp1.778,PIXEL,sc-6,n1 4:P=s2.b2.368+80,V=s2.b3.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 5:P=s2.b2.368+80,V=s2.b3.368+144,k1,c1,ortho,asp1.778,PIXEL,sc-6,n1 6:P=s2.b2.368+80,V=s2.b3.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 7:P=s2.b2.368+80,V=s2.b1.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 8:P=s2.b2.368+80,V=s2.b1.368+144,k1,c1,ortho,asp1.778,PIXEL,sc-6,n1 9:P=s2.b2.368+80,V=s2.b1.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 10:P=s2.b2.368+272,V=s2.b2.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-2,n1 11:P=s2.b2.368+272,V=s2.b2.368+144,k1,c1,ortho,asp1.778,PIXEL,sc-2,n1 12:P=s2.b2.368+272,V=s2.b1.176+0,k1,c1,ortho,asp1.778,PIXEL,sc-6,n1 13:P=s2.b2.368+272,V=s2.b3.368+80,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1 14:P=s2.b2.368+272,V=s2.b3.368+144,k1,c1,ortho,asp1.778,PIXEL,sc-6,n1 15:P=s2.b2.368+272,V=s2.b3.368+272,k0,c1,ortho,asp1.778,PIXEL,sc-6,n1
+tup: LP LOCK t=1793966908.369 f=2302 state none, was motion; P s2.b2.368+272 V s2.b2.368+272 ft 9.00 ms why=locked camera missing
+tup: LP: mip bias -2.58 (auto, swap chain) on sampler #14: mag 1 min 1 mip 1 addr 0 0 0 aniso 1 16 lod 0.0..16.0 own bias 0.00
+tup: frame 2381: selected depth #83 640x360 D32FS8, reversed Z (draws 32, verts 136212)
+tup: LP: stand-in #16 1920x1080 fmt 37 (game image #299 fmt 37, mutable 1)
+tup: LP: stand-in #17 1920x1080 fmt 37 (game image #301 fmt 37, mutable 1)
+tup: SHRT f=2382 0->2 why -1 off_run 108 fl_scopes 34
+tup: LP: scene colour image #82 640x360
+tup: FFX(1): Vela NPU: 600 frames, HTP 4.04 ms, fallbacks 0
+tup: LP STAT f=2400 frames 2400 runs 626 shown 628 promoted scopes 8208 descriptors redirected 8834 templates 626 copies 0/1155 noinput 0 mv ok 608 nocam 18 cuts 0 fail 0 scene_n 1 locked 0 live_fsr 1 failed 0 pause_until 0 tried 626 colour fills 5042 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966911.040 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 0 offb 0,0,0,1,1 hold 18 rep 2 secpromo 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=2407 cbvs 2597 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 3398 VP 233 lock 0 hlock t0 k0 c0 |
+tup: SHRT f=2434 2->1 why -1 off_run 0 fl_scopes 33
+tup: LP LOCK t=1793966912.269 f=2434 state motion, was none; P s0.b3.368+272 V s0.b3.368+272 ft 36.37 ms why=-
+tup: LP GPU f=2500 on-frames 120: mv 0.095 fsr 2.674 post+ui@out 20.532 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=2620 on-frames 120: mv 0.089 fsr 2.598 post+ui@out 17.515 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=2681: pass 1.027 ms (RCAS and guard) over 300 frames; scene peak 1.07; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: LP STAT f=2700 frames 2700 runs 926 shown 928 promoted scopes 12866 descriptors redirected 13790 templates 926 copies 0/1455 noinput 0 mv ok 874 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 926 colour fills 7598 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966919.812 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: UDIAG f=2700 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 15, no match 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=2707 cbvs 587 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 3630 VP 235 lock 1 hlock t0 k0 c0 |
+tup: LP GPU f=2740 on-frames 120: mv 0.090 fsr 2.548 post+ui@out 16.710 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=2860 on-frames 120: mv 0.088 fsr 2.535 post+ui@out 16.421 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=2980 on-frames 120: mv 0.089 fsr 2.527 post+ui@out 16.307 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=2981: pass 0.993 ms (RCAS and guard) over 300 frames; scene peak 1.00; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: FFX(1): Vela NPU: 600 frames, HTP 4.26 ms, fallbacks 0
+tup: LP STAT f=3000 frames 3000 runs 1226 shown 1228 promoted scopes 17366 descriptors redirected 18590 templates 1226 copies 0/1755 noinput 0 mv ok 1174 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 1226 colour fills 9998 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966926.808 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: upscale: present returned VkResult -1000001004 (3000 so far), reported as SUCCESS
+tup: JIT f=3000 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: UDIAG f=3000 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 20, no match 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: JIT f=3001 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: HEAPK f=3007 cbvs 535 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 3630 VP 235 lock 1 hlock t0 k0 c0 |
+tup: LP GPU f=3100 on-frames 120: mv 0.089 fsr 2.539 post+ui@out 16.487 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=3220 on-frames 120: mv 0.089 fsr 2.530 post+ui@out 16.347 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=3281: pass 0.999 ms (RCAS and guard) over 300 frames; scene peak 1.00; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: LP STAT f=3300 frames 3300 runs 1526 shown 1528 promoted scopes 21866 descriptors redirected 23390 templates 1526 copies 0/2055 noinput 0 mv ok 1474 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 1526 colour fills 12398 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966933.864 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: UDIAG f=3300 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 25, no match 0
+tup: COV heap: sets 0 blocks 0 skipped 0 new 0; image heaps 0
+tup: HEAPK f=3307 cbvs 531 skipped 0 blocks 0 shapes 0 conf 0 (+0 -0) asprej P 3630 VP 235 lock 1 hlock t0 k0 c0 |
+tup: LP GPU f=3340 on-frames 120: mv 0.089 fsr 2.532 post+ui@out 16.441 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=3460 on-frames 120: mv 0.088 fsr 2.520 post+ui@out 16.393 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=3580 on-frames 120: mv 0.089 fsr 2.548 post+ui@out 16.416 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=3581: pass 0.998 ms (RCAS and guard) over 300 frames; scene peak 1.00; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: FFX(1): Vela NPU: 600 frames, HTP 4.08 ms, fallbacks 0
+tup: LP STAT f=3600 frames 3600 runs 1826 shown 1828 promoted scopes 26366 descriptors redirected 28190 templates 1826 copies 0/2355 noinput 0 mv ok 1774 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 1826 colour fills 14798 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966940.964 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: JIT f=3600 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: UDIAG f=3600 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 30, no match 0
+tup: JIT f=3601 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: LP GPU f=3700 on-frames 120: mv 0.089 fsr 2.529 post+ui@out 16.362 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=3820 on-frames 120: mv 0.088 fsr 2.531 post+ui@out 16.413 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=3881: pass 0.999 ms (RCAS and guard) over 300 frames; scene peak 1.09; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: LP STAT f=3900 frames 3900 runs 2126 shown 2128 promoted scopes 30866 descriptors redirected 32990 templates 2126 copies 0/2655 noinput 0 mv ok 2074 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 2126 colour fills 17198 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966948.207 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: UDIAG f=3900 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 35, no match 0
+tup: LP GPU f=3940 on-frames 120: mv 0.089 fsr 2.550 post+ui@out 16.447 ms; off-frames 0: post+ui@render 0.000 ms
+tup: upscale: present returned VkResult -1000001004 (4000 so far), reported as SUCCESS
+tup: LP GPU f=4060 on-frames 120: mv 0.089 fsr 2.536 post+ui@out 16.359 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=4180 on-frames 120: mv 0.089 fsr 2.542 post+ui@out 16.395 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=4181: pass 1.002 ms (RCAS and guard) over 300 frames; scene peak 1.00; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: FFX(1): Vela NPU: 600 frames, HTP 4.10 ms, fallbacks 0
+tup: LP STAT f=4200 frames 4200 runs 2426 shown 2428 promoted scopes 35366 descriptors redirected 37790 templates 2426 copies 0/2955 noinput 0 mv ok 2373 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 2426 colour fills 19598 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966955.308 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: JIT f=4200 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: JIT f=4200 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: UDIAG f=4200 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 40, no match 0
+tup: JIT f=4201 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: LP GPU f=4300 on-frames 120: mv 0.089 fsr 2.540 post+ui@out 16.329 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=4420 on-frames 120: mv 0.089 fsr 2.543 post+ui@out 16.442 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=4481: pass 1.001 ms (RCAS and guard) over 300 frames; scene peak 1.14; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: LP STAT f=4500 frames 4500 runs 2726 shown 2728 promoted scopes 39866 descriptors redirected 42590 templates 2726 copies 0/3255 noinput 0 mv ok 2674 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 2726 colour fills 21998 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966962.413 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: UDIAG f=4500 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 45, no match 0
+tup: LP GPU f=4540 on-frames 120: mv 0.089 fsr 2.555 post+ui@out 16.425 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=4660 on-frames 120: mv 0.089 fsr 2.547 post+ui@out 16.427 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=4780 on-frames 120: mv 0.089 fsr 2.540 post+ui@out 16.361 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=4781: pass 1.002 ms (RCAS and guard) over 300 frames; scene peak 1.01; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: FFX(1): Vela NPU: 600 frames, HTP 4.08 ms, fallbacks 0
+tup: LP STAT f=4800 frames 4800 runs 3026 shown 3028 promoted scopes 44366 descriptors redirected 47390 templates 3026 copies 0/3555 noinput 0 mv ok 2974 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 3026 colour fills 24398 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966969.490 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: JIT f=4800 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: UDIAG f=4800 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 50, no match 0
+tup: JIT f=4801 cur +0.0000 +0.0000 prev +0.0000 +0.0000 px dj 1
+tup: LP GPU f=4900 on-frames 120: mv 0.089 fsr 2.537 post+ui@out 16.389 ms; off-frames 0: post+ui@render 0.000 ms
+tup: upscale: present returned VkResult -1000001004 (5000 so far), reported as SUCCESS
+tup: LP GPU f=5020 on-frames 120: mv 0.089 fsr 2.537 post+ui@out 16.356 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GUARD f=5081: pass 1.000 ms (RCAS and guard) over 300 frames; scene peak 1.07; scrubbed frames 0, px NaN or Inf 0, over range 0, scene 0, pauses 0
+tup: LP STAT f=5100 frames 5100 runs 3326 shown 3328 promoted scopes 48866 descriptors redirected 52190 templates 3326 copies 0/3855 noinput 0 mv ok 3274 nocam 52 cuts 0 fail 0 scene_n 1 locked 1 live_fsr 1 failed 0 pause_until 0 tried 3326 colour fills 26798 static_vp 0 mesh 0 bytecount 0 late 0 split 0 chain 0 sw 0 lm 0,0,0,0,0,0,0 t=1793966976.584 loss 0,0,1664,0,0,0,0,0,0,0,0,0,108,0,0 tr 3 trh 1 offb 0,0,0,1,1 hold 52 rep 2 secpromo 0
+tup: UDIAG f=5100 misses 29: in slice 0, folded not slice 0, written after the main fold 0, copy only 0, nowhere 29 | hits checked 55, no match 0
+tup: LP GPU f=5140 on-frames 120: mv 0.089 fsr 2.545 post+ui@out 16.455 ms; off-frames 0: post+ui@render 0.000 ms
+tup: LP GPU f=5260 on-frames 120: mv 0.089 fsr 2.542 post+ui@out 16.401 ms; off-frames 0: post+ui@render 0.000 ms

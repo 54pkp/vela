@@ -9,6 +9,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "py_modules"))
 import gpufloor  # noqa: E402
 
+# GPF1: the floor is off by default (an opt-in setting); these checks are the floor's own rules, so they run with it on
+if hasattr(gpufloor.GpuFloor, "set_opt_in"):
+    _gf_init = gpufloor.GpuFloor.__init__
+    def _gf_init_on(self, *a, **k):
+        _gf_init(self, *a, **k)
+        self.data["opt_in"] = True
+    gpufloor.GpuFloor.__init__ = _gf_init_on
+
 FREQS = "220000000 295000000 348000000 401000000 475000000 550000000 615000000 680000000"
 tmp = tempfile.mkdtemp(prefix="vela_floor_")
 try:

@@ -195,6 +195,8 @@ def hint(p, st):
                 return {"id": "npu_qnn"}
             if svc.get("unit_state") == "failed":
                 return {"id": "npu_failed"}
+            if svc.get("unit_state") == "unknown":  # systemctl gave no answer: it may have failed, "not running" would be a guess
+                return {"id": "npu_unknown"}
             return {"id": "npu_service"}
     if log.get("out_format") and p["model"] in FSR4_MODELS:
         return {"id": "out_format"}

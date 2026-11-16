@@ -17,6 +17,7 @@ import gameutil
 import launchopts  # noqa: E402
 import latency  # noqa: E402
 import live  # noqa: E402
+import nofg  # noqa: E402
 import npu  # noqa: E402
 import presets  # noqa: E402
 import report  # noqa: E402
@@ -58,6 +59,9 @@ def carry_settings(settings):
         decky.logger.error(f"settings carry-over: {e}")
 
 
+IDLE_FULL_EVERY = 30   # V14: passes of the 10 s loop between two full checks of a closed, untouched set-up game (5 min)
+
+
 class Plugin:
     async def _main(self):
         home, settings = decky.DECKY_USER_HOME, decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -69,6 +73,9 @@ class Plugin:
         # copying into the game folder when bwrap's overlay does not work for a game (sgsr3.overlay_ok)
         try:
             velakit.install_launcher(home, self.s3.kits_dir)
+            back = self.s3.kits_reinstall()  # V08: kits an uninstall (or an update) switched off for the launcher
+            if back:
+                decky.logger.info(f"kits on again after a reinstall: {back}")
             wrap = velakit.wrapper_supported() and velakit.plugin_declares_wrapper(os.path.dirname(os.path.abspath(__file__)))
             self.s3.new_mode = "wrapper" if wrap else "launcher"
         except Exception as e:
@@ -77,7 +84,7 @@ class Plugin:
         decky.logger.info(f"Vela kit mode for new setups: {self.s3.new_mode}")
         self.ag = anygame.AnyGame(os.path.join(ASSETS, "layer"), home, settings, log=decky.logger.info)
         self.lat = latency.Latency(home, settings, log=decky.logger.info)
-        self.cfg = gamecfg.GameCfg(settings, log=decky.logger.info)
+        self.cfg = gamecfg.GameCfg(settings, log=decky.logger.info, home=home)
         # 0.5.0: settings the panel changes while the game runs (the fork reads /tmp/vela-live/<appid>.ini)
         self.live = live.Live(settings, log=decky.logger.info)
         self.live.restore_all()
@@ -92,6 +99,16 @@ class Plugin:
             self.npu.sync_manifest()
         except (OSError, ValueError) as e:
             decky.logger.error(f"npu: layer manifest: {e}")
+        # NOFG (owner 2026-11-15): frame generation is out of Vela (the lp0 layer, anyfsr4.py, moved to _removed). Once, for a game
+        # an older build left with the layer: its live file back, the layer manifest moved aside; Steam's launch options back when the
+        # panel shows the game (launch_pending -> launch_fix). Its upscaler settings (Vela's kit, the NPU layer) stay.
+        self.nofg = nofg.NoFg(os.path.join(ASSETS, "anyfsr4"), home, settings, log=decky.logger.info)
+        try:
+            left = self.nofg.start(gameutil.running_appids())
+            if left:
+                decky.logger.info(f"frame generation removed: Steam's launch options of {left} go back when the panel shows them")
+        except (OSError, ValueError) as e:
+            decky.logger.error(f"nofg: {e}")
         # 0.8.2: GPU floor while a game Vela upscales runs (py_modules/gpufloor.py: Armada has no per-game GPU minimum)
         self.floor = gpufloor.GpuFloor(settings, log=decky.logger.info)
         # 0.8.3: "CPU for the game": cpu7's cap raised inside Balanced while a chosen game runs (py_modules/cpuboost.py)
@@ -134,23 +151,42 @@ class Plugin:
             await asyncio.sleep(10)
             try:
                 # 0.5.4: our dxgi.dll in each closed game Vela is on in follows the plugin's build
-                running = await asyncio.to_thread(gameutil.running_appids)
-                await asyncio.to_thread(self.floor.reconcile, running)
-                await asyncio.to_thread(self.cpu.reconcile, running)  # also the restore after a crash (no game runs)
-                self.rep.observe(running)  # 0.8.16: how long each run lasted (the bad-run question)
+                running = await asyncio.to_thread(gameutil.running_appids)  # read only: no lock
+                await self._step(self.floor.reconcile, running)
+                await self._step(self.cpu.reconcile, running)  # also the restore after a crash (no game runs)
+                async with self._lk():  # V05: the same dicts are changed by panel calls in worker threads
+                    self.rep.observe(running)  # 0.8.16: how long each run lasted (the bad-run question)
+                if getattr(self, "nofg", None) is not None:  # NOFG: a run that had the older build's layer has ended: its live file back
+                    await self._step(self.nofg.reconcile, running)
+                # V04 (audit 2026-11-09): the live files in /tmp again when something removed them while the plugin runs
+                await self._step(self.live.ensure)
                 if self.up.reset_pending:  # Gamescope was not up at plugin start
-                    await asyncio.to_thread(self.up.restore_steam_filter)
+                    await self._step(self.up.restore_steam_filter)
+                # V14 (audit 2026-11-09): the full check of a closed set-up game (the last run's log kept, every kit file
+                # compared, the 1546-line ini rebuilt with ~36 passes, the game folder walked again when the 120 s scan cache
+                # is old) ran for EVERY set-up game on EVERY 10 s pass, for ever. Now: once at plugin start, once when the game
+                # leaves the running set (its log must be kept before the next start overwrites it), and every IDLE_FULL_EVERY
+                # passes; in between a few stats per game (kit_unchanged) and the full check only when a file changed.
+                self._pass = getattr(self, "_pass", 0) + 1
+                done = self.__dict__.setdefault("_idle_done", set())
                 for appid in list(self.up.cfg.get("sgsr3", [])):
-                    if appid not in running:
+                    if appid in running:
+                        done.discard(appid)
+                        continue
+                    if appid not in done or self._pass % IDLE_FULL_EVERY == 0:
                         # 0.8.13: the last run's log first (the next launch overwrites it), then the DLL update
-                        kept = await asyncio.to_thread(self.s3.keep_runs, appid, False)
+                        kept = await self._step(self.s3.keep_runs, appid, False)
                         await self._report_run_end(appid, kept)
-                        await asyncio.to_thread(self.s3.refresh_dll, appid)
+                        await self._step(self.s3.refresh_dll, appid)
+                        done.add(appid)
+                    elif not await self._step(self.s3.kit_unchanged, appid):
+                        await self._step(self.s3.refresh_dll, appid)
                 if self.lat.has_pending() or self.ag.has_pending() or self.cfg.has_pending():
-                    running = await asyncio.to_thread(gameutil.running_appids)
-                    await asyncio.to_thread(self.lat.reconcile, running)
-                    await asyncio.to_thread(self.ag.reconcile, running)
-                    await asyncio.to_thread(self.cfg.reconcile, running)
+                    # V14: the pass's own list of running games (cfg.has_pending is true whenever a state file exists, so this
+                    # was a second /proc scan on every pass)
+                    await self._step(self.lat.reconcile, running)
+                    await self._step(self.ag.reconcile, running)
+                    await self._step(self.cfg.reconcile, running)
             except Exception:
                 decky.logger.exception("reconcile failed")
 
@@ -169,7 +205,7 @@ class Plugin:
         if not kept:
             return
         try:
-            entry = await asyncio.to_thread(self.rep.on_run_end, appid, kept)
+            entry = await self._step(self.rep.on_run_end, appid, kept)
             if entry:
                 await decky.emit("vela_report_prompt", entry)
         except Exception:
@@ -180,7 +216,11 @@ class Plugin:
         while True:
             await asyncio.sleep(2)
             try:
-                await asyncio.to_thread(self.cpu.guard, gameutil.running_appids)
+                # V14: the guard has work only while a cap is applied (_clocks_default switches every game's boost off at
+                # each start): no worker thread every 2 s for nothing
+                if not (getattr(self.cpu, "data", None) or {}).get("applied"):
+                    continue
+                await self._step(self.cpu.guard, gameutil.running_appids)
             except Exception:
                 decky.logger.exception("cpu boost guard")
 
@@ -194,6 +234,35 @@ class Plugin:
         for appid in list(self.cpu.data["games"]):
             self.cpu.set_mode(appid, "off", running)
 
+    def _uninstall_sync(self):
+        s3 = getattr(self, "s3", None)
+        kits = s3.kits_uninstall() if s3 else []
+        gone = [n for n in ("npu",) if getattr(self, n, None) is not None and getattr(self, n).manifest_out()]
+        copy = []
+        for appid in list(getattr(getattr(self, "up", None), "cfg", {}).get("sgsr3", [])) if s3 else []:
+            try:
+                if s3.install_mode(appid) == "copy":
+                    copy.append(appid)
+            except Exception:  # noqa: BLE001 - an unreadable game folder must not stop the uninstall
+                pass
+        return {"kits_off": kits, "manifests_removed": gone, "copy_setups_left": copy}
+
+    async def _uninstall(self):
+        """V08 (audit 2026-11-09): Decky calls this after _unload when the plugin is removed (and when it is updated: the old
+        one is uninstalled first). Before, there was no _uninstall: every set-up game kept starting with Vela's kit while the
+        NPU layer's library was gone (FSR 4 on the GPU: slower, hotter), the two layer manifests pointed into the removed
+        plugin folder, and no panel was left to switch anything off. Now every overlay kit is switched off for the launcher
+        (the games start as without Vela) and the manifests are taken out; _main switches the kits on again when the plugin
+        comes back. Files of copy setups stay in the game folders (only the panel's Off restores a game's own files); they
+        are named in the log."""
+        try:
+            async with self._lk():
+                out = await asyncio.to_thread(self._uninstall_sync)
+            decky.logger.info(f"Vela uninstalled: kits off {out['kits_off']}, layer manifests removed {out['manifests_removed']}, "
+                              f"copy setups left in their game folders {out['copy_setups_left']}")
+        except Exception:
+            decky.logger.exception("uninstall")
+
     async def _unload(self):
         for t in ("loop", "cpu_loop", "update_loop"):
             if getattr(self, t, None):
@@ -204,9 +273,32 @@ class Plugin:
             self.cpu.release()
         decky.logger.info("Vela unloading")
 
-    async def _run(self, fn, *args):
+    def _lk(self):
+        """V05 (audit 2026-11-09): ONE lock for everything that reads a state file, changes it and writes it back: each step of
+        the 10 s loop, the 2 s CPU guard and every panel call. Before, the loop ran each step in a worker thread and every
+        panel call ran in another: the loop inside refresh_dll while the player pressed Off wrote OptiScaler.ini and state.json
+        again into a game whose backup was just removed (the next pass put Vela's DLLs back over the game's own files); two
+        calls read one JSON state and the first wrote its old copy back; Reporter.observe ran on the event-loop thread and in
+        panel threads on the same dicts. Made on first use (an asyncio.Lock belongs to the running loop)."""
+        lk = getattr(self, "_lock", None)
+        if lk is None:
+            lk = self._lock = asyncio.Lock()
+        return lk
+
+    async def _step(self, fn, *args):
+        """One step of a background loop, in a worker thread, under the lock (a panel call waits for one step at most)."""
+        async with self._lk():
+            return await asyncio.to_thread(fn, *args)
+
+    async def _run(self, fn, *args, lock=True):
+        """A panel call in a worker thread, under the lock. lock=False: calls that only talk to the network and keep their
+        own lock (the update check / download, sending a report): a slow server must not hold the panel and the loop."""
         try:
-            data = await asyncio.to_thread(fn, *args)
+            if lock:
+                async with self._lk():
+                    data = await asyncio.to_thread(fn, *args)
+            else:
+                data = await asyncio.to_thread(fn, *args)
             json.dumps(data)  # an answer Decky cannot send gets no reply at all: the panel would wait for ever (0.8.21)
             return {"ok": True, "data": data}
         except Exception as e:
@@ -217,7 +309,7 @@ class Plugin:
         # the game's frame arrives at the panel resolution already: Gamescope must not upscale it again
         self.up.set_sgsr3(appid, s3_on or ag_on)
 
-    def _game_state(self, appid, window=None):
+    def _game_state(self, appid, window=None, launch=None):
         """window: Steam's resolution override for the game as the panel read it (GetResolutionOverrideForApp; None = not
         read): the steps say when it is not the window the mode needs (0.8.11)."""
         if getattr(self, "chip", None) is not None:
@@ -228,7 +320,10 @@ class Plugin:
         self.lat.reconcile(running)
         self.ag.reconcile(running)
         self.cfg.reconcile(running)
-        s3 = self.s3.status(appid)
+        if isinstance(launch, str):  # V03: Steam's options as the panel read them when it opened (None: not read this time)
+            self._launch_seen = {**getattr(self, "_launch_seen", {}), appid: launch}
+        # V03 (audit 2026-11-09): a log older than this run's start is the previous run's: not shown as this run's state
+        s3 = self.s3.status(appid, run_since=gameutil.run_started(appid) if appid in running else None)
         s3["game_cfg"] = self.cfg.status(appid)
         s3["live"] = self.live.get(appid)
         s3["npu"] = self.npu.status(appid)
@@ -263,7 +358,7 @@ class Plugin:
                "latency": lat, "suggest": suggest(scan, s3, ag)}
         out.update(self._model_state(appid, out, window))
         try:
-            out["report"] = self.rep.panel() if getattr(self, "rep", None) else None
+            out["report"] = self.rep.panel(appid) if getattr(self, "rep", None) else None  # UPX1: this game's question only
         except Exception:
             decky.logger.exception("report: panel")
             out["report"] = None
@@ -288,7 +383,7 @@ class Plugin:
         return await self._run(self._report_prepare, str(appid), str(reason), text, launch_options, game_name, log_name)
 
     async def report_send(self, local_id):
-        return await self._run(self.rep.send, str(local_id))
+        return await self._run(self.rep.send, str(local_id), lock=False)
 
     async def report_dismiss(self, key, never=False):
         return await self._run(self.rep.dismiss, str(key), bool(never))
@@ -296,27 +391,37 @@ class Plugin:
     async def report_saved(self):
         return await self._run(self.rep.saved)
 
+    # ---- GPU floor setting (py_modules/gpufloor.py, GPF1: off by default) ----
+
+    async def gpu_floor_opt(self, on=None):
+        """None: the setting as it is; True / False: the floor on / off for every game Vela is on in."""
+        if on is None:
+            return {"opt_in": bool(self.floor.data.get("opt_in"))}
+        return await self._run(self.floor.set_opt_in, bool(on), gameutil.running_appids())
+
     # ---- updates (py_modules/updater.py) ----
 
     async def update_state(self, auto=True):
         """The panel opens: the cached answer, after the automatic check when it is due (auto)."""
-        return await self._run(self.upd.check if auto else self.upd.state)
+        return await self._run(self.upd.check if auto else self.upd.state, lock=False)
 
     async def update_check(self):
         """The panel's "Check now": ask GitHub at once, also when the automatic check is off."""
-        return await self._run(self.upd.check, True)
+        return await self._run(self.upd.check, True, lock=False)
 
     async def update_enable(self, on):
-        return await self._run(self.upd.set_enabled, bool(on))
+        return await self._run(self.upd.set_enabled, bool(on), lock=False)
 
     async def update_prepare(self):
         """The player pressed Update: the checked zip URL and its sha256 for Decky's install-from-URL."""
-        return await self._run(self.upd.prepare)
+        return await self._run(self.upd.prepare, lock=False)
 
     # ---- 0.8.13: the model by hand ----
 
     def _check(self, appid, scan, s3, ag):
         # 0.8.13: no any-game layer (ag_assets=False): a game without DLSS / FSR / XeSS is "Not supported"
+        # NOFG (owner 2026-11-15): again so -- kind "any" (0.8.22's layer for a game without an upscaler input) is gone with frame
+        # generation; Vela replaces a game's own upscaler only
         v = self.check.check(scan, static=bool(profiles.static_fsr2(appid)),
                              s3_assets=os.path.isfile(os.path.join(ASSETS, "sgsr3", "OptiScaler.dll")),
                              ag_assets=False, appid=appid)
@@ -363,7 +468,8 @@ class Plugin:
                "auto_model": self._default_model(v["kind"], s3, npu_st),
                "window": win, "window_fix": False,
                "layer_on": bool(ag.get("installed")),  # 0.8.12's any-game layer: the panel turns it off
-               "launch_fix": self._launch_pending(appid, s3)}
+               "launch_fix": self._launch_pending(appid, s3),
+               "not_in_launch": self._not_in_launch(appid, s3, bool(gs.get("running")))}
         if not gs["running"]:
             self._win_restart.discard(appid)
         if on and v["kind"] in presets.KINDS:
@@ -437,6 +543,11 @@ class Plugin:
         return {"launch_options": launch_options}
 
     def _llfg_migrate(self):
+        # V15 (audit 2026-11-09): once. LL / FG left the panel in 0.8.9, yet every plugin start asked s3.status of every set-up
+        # game on the event loop (a cold folder walk, an md5 of the kit DLL, up to 2 MB of log each): with 15 games on an SD
+        # card the panel sat on "Loading" until all walks ended. No game can get LL / FG again, so one clean pass is enough.
+        if self.up.cfg.get("llfg_migrated"):
+            return
         games = set(self.up.cfg.get("sgsr3", []))
         try:
             d = os.path.dirname(self.lat._state_path("0"))
@@ -447,6 +558,9 @@ class Plugin:
             if self._llfg_active(appid):
                 self._llfg_off(appid, None)
                 self._llfg_pending(appid, True)
+        with self.up.lock:
+            self.up.cfg["llfg_migrated"] = True
+            self.up._save()
 
     async def llfg_off(self, appid, launch_options):
         return await self._run(self._llfg_off, str(appid), launch_options)
@@ -481,12 +595,17 @@ class Plugin:
     def _launch_pending(self, appid, s3):
         """Whether Steam's launch options of this game still need _launch_keep (the panel calls launch_fix once when it
         shows the game): the layer's tokens are not in, or VELA_FSR2_ALGO is in what Vela recorded."""
+        nf = getattr(self, "nofg", None)
+        if nf is not None and nf.launch_pending(appid, gameutil.running_appids()):
+            return True  # NOFG: an older build's lp0 layer (frame generation, FSR 4 for any game): launch_fix takes it out
         if not s3.get("installed"):
             return False
         if self.s3.migrate_pending(appid) and appid not in gameutil.running_appids():
             return True  # 0.8.20: a copy setup moves to the overlay
         if self.s3.launch_legacy(appid):
             return True  # 0.8.17: set up by an older Vela, no record of its own tokens yet
+        if self._launch_lost(appid):
+            return True  # V03: Steam's options lost what Vela put in (pasted over, reset): launch_fix puts it back
         st = self.npu.read(appid) or {}
         if self.npu.ready() and not st.get("on"):
             return True
@@ -495,9 +614,52 @@ class Plugin:
         return any(sgsr3.LEGACY_ENV.search(t) for t in (st.get("launch_prev"), st.get("launch_set"),
                                                         self.s3.launch_set(appid)) if isinstance(t, str))
 
+    def _not_in_launch(self, appid, s3, running):
+        """V03c (audit 2026-11-09): the game is set up but Vela is not in its launch, and launch_fix cannot mend it:
+        "wrapped": an overlay setup in launcher mode whose Steam options wrap %command% in a shell command (no launcher can
+        stand in front, V02); "left_out": vela-launch left the kit out of the run that is going on (its launch.log says why).
+        None otherwise. The panel shows a neutral existing text for both until the owner picks the wording (NIGHT/QUESTIONS.md)."""
+        if not s3.get("installed"):
+            return None
+        seen = getattr(self, "_launch_seen", {}).get(appid)
+        if isinstance(seen, str) and self.s3.install_mode(appid) == "launcher" and launchopts.wrapped_cmd(seen) \
+                and velakit.LAUNCHER_TOKEN not in launchopts.words(seen):
+            return "wrapped"
+        if s3.get("kit_missing"):
+            return "left_out"  # KIT1: vela-launch refuses an incomplete kit on every launch: the panel says so also while idle
+        runs = running if isinstance(running, bool) else appid in running   # the game's own flag, or the set of running games
+        if runs and self.s3.left_out(appid, gameutil.run_started(appid)):
+            return "left_out"
+        return None
+
+    def _launch_lost(self, appid):
+        """V03 (audit 2026-11-09): the game is set up, and Steam's launch options as the panel last read them no longer carry
+        what Vela put in: the launcher token (an overlay setup in launcher mode) or the NPU layer's tokens (a copy setup).
+        The game then starts without Vela while the panel says On. Options not read yet, or options that wrap %command% in a
+        shell command (V02: no launcher can stand in front): False."""
+        seen = getattr(self, "_launch_seen", {}).get(appid)
+        if not isinstance(seen, str):
+            return False
+        have = launchopts.words(seen)
+        if self.s3.install_mode(appid) == "launcher":
+            return velakit.LAUNCHER_TOKEN not in have and not launchopts.wrapped_cmd(seen)
+        st = self.npu.read(appid) or {}
+        if st.get("on") and seen != st.get("launch_set"):
+            return any(t not in have for t in st.get("tokens") or ())
+        return False
+
     def _launch_fix(self, appid, launch_options):
-        """The panel's one-time migration of a game set up by an older Vela (0.8.15): see _launch_keep. 0.8.20: a game set
+        """V03: also puts back what Steam's options lost (_launch_lost).
+        The panel's one-time migration of a game set up by an older Vela (0.8.15): see _launch_keep. 0.8.20: a game set
         up by copying into its folder moves to the overlay while it is closed (_overlay_migrate)."""
+        nf = getattr(self, "nofg", None)
+        if launch_options is not None and nf is not None and nf.launch_pending(appid, gameutil.running_appids()):
+            # NOFG (owner 2026-11-15, frame generation out of Vela): the older build's layer out of Steam's options, byte for byte when
+            # nobody edited them (else exactly its tokens); not while the game runs. FSR 4 for any game (NOFSR) had the NPU layer's
+            # tokens on top: they go first, so each restores exactly. Then the kit's own fix (its upscaler stays as it is).
+            if (nf.read(appid) or {}).get("on") and (self.npu.read(appid) or {}).get("on"):
+                launch_options = self.npu.disable(appid, launch_options)
+            launch_options = nf.launch_fix(appid, launch_options)
         if launch_options is None or not self.s3.status(appid)["installed"]:
             return {"launch_options": launch_options}  # Steam's options not read: nothing to rewrite
         if self.s3.migrate_pending(appid) and appid not in gameutil.running_appids():
@@ -542,7 +704,19 @@ class Plugin:
         if mode == "copy":  # the overlay stopped working in the meantime: set up as before
             r = self.s3.enable(appid, st.get("opts"), launch, res.get("resolution"), mode="copy")
             return self.npu.enable(appid, r["launch_options"]) if npu_on else r["launch_options"]
-        r = self.s3.enable(appid, st.get("opts"), self.s3.kit_options(appid), res.get("resolution"), mode=mode)
+        try:
+            r = self.s3.enable(appid, st.get("opts"), self.s3.kit_options(appid), res.get("resolution"), mode=mode)
+        except Exception as e:
+            # V09 (audit 2026-11-09): the copy setup is already gone (s3.disable above). Raising here left the game Off with
+            # Vela's copy-mode tokens in Steam's options for ever (the panel writes nothing after an error). The copy setup
+            # goes back as it was; when that fails too the answer is the options without Vela's tokens (the truth: Off).
+            decky.logger.exception(f"move to the overlay failed for {appid}: {e}")
+            try:
+                r = self.s3.enable(appid, st.get("opts"), launch, res.get("resolution"), mode="copy")
+                return self.npu.enable(appid, r["launch_options"]) if npu_on else r["launch_options"]
+            except Exception:
+                decky.logger.exception(f"the copy setup of {appid} could not be put back either: Vela is off for it")
+                return launch
         kit = self.npu.enable(appid, r["launch_options"]) if npu_on else r["launch_options"]
         if isinstance(st.get("launch_prev"), str) and st.get("launch_prev") == st.get("launch_set"):
             # the record took Vela's own options for the player's, so the restore gave Vela's tokens back
@@ -550,8 +724,14 @@ class Plugin:
         self.s3.log(f"sgsr3: {appid}: moved from the game folder to the overlay ({mode})")
         return self._kit_out(appid, launch, kit, mode)
 
+    def _launch_fix_seen(self, appid, launch_options):
+        out = self._launch_fix(appid, launch_options)
+        if isinstance(out.get("launch_options"), str):  # V03: what Steam's options are after the fix (the panel sets them)
+            self._launch_seen = {**getattr(self, "_launch_seen", {}), appid: out["launch_options"]}
+        return out
+
     async def launch_fix(self, appid, launch_options):
-        return await self._run(self._launch_fix, str(appid), launch_options)
+        return await self._run(self._launch_fix_seen, str(appid), launch_options)
 
     def _apply_model(self, appid, model, launch_options, resolution):
         """0.8.20: in an overlay setup the modules edit the kit's own options instead of Steam's (_kit_out)."""
@@ -607,8 +787,19 @@ class Plugin:
             launch = launch_options
         # 0.8.15: FSR 4 always on the NPU when it is ready, exact; the layer's tokens stay in the launch options of a
         # set-up game whatever the model, so FSR 3 -> FSR 4 needs no restart
-        launch = self._launch_keep(appid, launch)
-        self.live.set(appid, presets.live_wanted(model, self.npu.status(appid)))
+        try:
+            launch = self._launch_keep(appid, launch)
+            self.live.set(appid, presets.live_wanted(model, self.npu.status(appid)))
+        except Exception:
+            # V09 (audit 2026-11-09): a FIRST setup that fails here (for example /tmp full: the live file) had its files in
+            # and its state written, but the panel writes no launch options after an error: the panel showed On and nothing
+            # ran. The setup just made is taken out again, so the error leaves the game as it was: Off.
+            if not s3["installed"]:
+                try:
+                    self._s3_disable(appid, launch)
+                except Exception:
+                    decky.logger.exception(f"undo of the failed first setup of {appid}")
+            raise
         # the window is always the full screen (resolution = Steam's override as the panel read it)
         win = presets.window_size(resolution)
         if win is not None and win != presets.SCREEN:
@@ -623,6 +814,10 @@ class Plugin:
     def _window_fix(self, appid):
         """0.8.15: the panel puts Steam's window of a set-up game back to the full screen (an old window pick of 720p / 900p
         or Steam's own setting). A running game takes it at its next start: the hint then says to restart it."""
+        # V06 (audit 2026-11-09): only for a game Vela is set up in. It answered "Default" for ANY appid: a stale window_fix
+        # flag of the game shown before reset another game's Steam resolution
+        if not self.s3.status(appid).get("installed"):
+            return {"resolution": None}
         if appid in gameutil.running_appids():
             self._win_restart.add(appid)
         return {"resolution": "Default"}
@@ -652,10 +847,15 @@ class Plugin:
         return res
 
     def _s3_disable(self, appid, launch_options):
-        if (self.npu.read(appid) or {}).get("on"):
-            launch_options = self.npu.disable(appid, launch_options)
+        # V09 (audit 2026-11-09): the NPU layer's state goes only after s3.disable is through. It was dropped first; when
+        # s3.disable then raised ("restore check failed") the retry no longer knew the layer's tokens and left them in the
+        # player's launch options for good.
+        npu_on = bool((self.npu.read(appid) or {}).get("on"))
+        launch = self.npu.disable(appid, launch_options, dry=True) if npu_on else launch_options
+        res = self.s3.disable(appid, launch)
+        if npu_on:
+            self.npu.disable(appid, launch_options)
             self.live.set(appid, {"npu": None})
-        res = self.s3.disable(appid, launch_options)
         self.floor.disable(appid, gameutil.running_appids())
         self._sync_gamescope(appid, False, False)
         self.cfg.disable(appid, appid in gameutil.running_appids())
@@ -667,5 +867,14 @@ class Plugin:
         self._sync_gamescope(appid, False, False)
         return res
 
-    async def game_state(self, appid, window=None):
-        return await self._run(self._game_state, str(appid), None if window is None else str(window))
+    async def game_state(self, appid, window=None, launch=None):
+        # V05: the panel polls every 1.5 s; while a long call holds the lock the polls for the same game share ONE waiting
+        # call (they would pile up behind the lock and run one after the other when it is free)
+        key = (str(appid), None if window is None else str(window), launch if isinstance(launch, str) else None)
+        wait = self.__dict__.setdefault("_gs_wait", {})
+        t = wait.get(key)
+        if t is None or t.done():
+            for k in [k for k, v in wait.items() if v.done()]:
+                wait.pop(k, None)
+            t = wait[key] = asyncio.ensure_future(self._run(self._game_state, *key))
+        return await asyncio.shield(t)

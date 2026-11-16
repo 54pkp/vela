@@ -37,19 +37,21 @@ assert "ru.json" not in code and "LocalizationManager" not in code and "navigato
 assert 'import en from "./i18n/en.json";' in ts and "export type Key = keyof typeof en;" in ts
 used = set(re.findall(r'\bt\("([\w.]+)"', code))
 assert used and used <= set(en), used - set(en)
-for fam, ids in {"model.note": ["fsr4", "fsr4fast", "fsr3", "sgsr2", "off"], "model.why": ["chip_no_fsr4"], "speed": ["fsr4", "sgsr2", "static"],
+for fam, ids in {"model.note": ["fsr4", "fsr4fast", "fsr3", "sgsr2", "off"], "model.why": ["chip_no_fsr4"], "pic": ["auto", "sharp", "fps", "auto.note", "sharp.note", "fps.note"], "speed": ["fsr4", "sgsr2", "static"],
                  "rp.reason": ["crash", "fsr", "image", "slow", "other"],
                  "reason": ["anticheat", "not_installed", "non_steam", "opengl", "vulkan_native", "no_inputs", "no_exe", "godot"],
                  "hint": ["restart_window", "dx12_choice", "npu_missing_layer", "npu_install", "npu_update_up", "npu_update_sizes", "npu_qnn",
-                          "npu_service", "npu_failed", "game_res", "chip_v79", "chip_other", "chip_unknown"]}.items():
+                          "npu_service", "npu_failed", "npu_unknown", "game_res", "chip_v79", "chip_other", "chip_unknown"]}.items():
     for i in ids:
         assert f"{fam}.{i}" in en, f"{fam}.{i}"
 # every hint id the backend can send has a text
 for i in re.findall(r'\{"id": "(\w+)"', read(ROOT, "py_modules", "presets.py")):
     assert f"hint.{i}" in en, i
 # the English texts are the ones the panel had before the Russian language was removed: spot checks
+# PL2 (owner rule): the word "speed" is never shown; the ids speed.* stay (index.tsx builds them from the game's kind)
+assert not [k for k, v in en.items() if "speed" in v.lower()], [k for k, v in en.items() if "speed" in v.lower()]
 assert en["rp.button"] == "Report a problem" and en["off_title"] == "Off" and en["hint.chip_unknown"] == "unknown chip"
-assert len(en) == 130, len(en)  # 0.8.21: hint.npu_update_sizes, reason.non_steam; 0.8.20: hint.dx11_run, hint.out_format, st.dx11; incl. model.why.chip_no_fsr4 and the 20 update texts (up.*)
+assert len(en) == 147, len(en)  # NOFG (2026-11-15): -33 (fg.* 18, fgo.* 3, any.* 10, model.note.offFg, model.note.fsr4any)  # NORIFE (2026-11-11): -fg.rife  # V03 (owner 2026-11-10): +st.notConnected, st.launchWrapped  # PL15: +fg.loopOff, fg.initFail  # PL13: +fg.genFail, fg.noLayer  # PL11: +fg.idleScreen, fg.idleTime, fg.slow, fg.slowWhy  # PL10: +fg.npu16  # PL9: +fgo.name, fgo.restart, fgo.size, model.note.offFg, fg.naFsr  # UPX1: +any.safeOffWhy, any.restart, any.liveOff, rp.why.safe_off  # PLB5: +fg.npu15  # PL7: -fg.x2 +fg.amd, fg.rife, fg.na, fg.restart  # PL6: +fg.head, fg.off, fg.x2, fg.note, fg.fps  # PL5: +pic.balanced, pic.balanced.note, pic.restart, sharp.label, sharp.off, sharp.note  # PL3: -any.window +any.setup +any.full +t.sectionPicture +pic.* (6)  # PL2: any.stretch, any.stretchWhy  # 0.8.22: model.note.fsr4any, any.window, any.pack, any.safeOff, any.npuSize  # 0.8.21: hint.npu_update_sizes, reason.non_steam, hint.npu_unknown; 0.8.20: hint.dx11_run, hint.out_format, st.dx11; incl. model.why.chip_no_fsr4 and the 20 update texts (up.*)
 # every reason py_modules/updater.py can give the panel has a text (network / github have their own wording)
 upd_src = read(ROOT, "py_modules", "updater.py")
 codes = set(re.findall(r'UpdateError\("(\w+)', upd_src)) | {"network", "github"}

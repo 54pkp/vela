@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.22 — 2026-11-16
+
+Mostly fixes from player reports.
+
+- Death Stranding Director's Cut starts with Vela on. Vela no longer overrides OptiScaler's own list of games that break when it pretends to be a different GPU, which should also help other games on that list.
+- Returnal no longer crashes about 25 seconds after launch (same cause).
+- Deep Rock Galactic: Vela launches it in DirectX 12 (Steam's default DirectX 11 launch crashed). Turning Vela off puts back the game's anti-aliasing setting.
+- Turning Vela off keeps launch options you added while it was on, doesn't leave a game half set up if something fails, and leaves a read-only settings file alone.
+- The panel no longer says "On" when Vela isn't actually running in the game.
+- Reports carry the logs, OptiScaler.ini, launch options and GPU kernel messages of the run that had the problem.
+- Uninstalling the plugin turns Vela off in your games first.
+- A failed update check is retried after an hour instead of the next day.
+- Frame generation (test builds only) is removed. Updating from such a build turns it off and restores that game's launch options.
+- Known issues: Clair Obscur: Expedition 33 has scenes where DLSS gets no depth buffer; Vela uses FSR 1 there for now (small bright specks on sharp edges are possible), a proper fix is in progress. PRAGMATA crashes with Vela on (seen on 8 Elite). Cyberpunk 2077 with FSR 4 Fast: reports of black rectangles, being checked.
+
 ## 0.8.21 — 2026-11-05
 
 - **FSR 4 on the NPU at five more game resolutions:** 1600x904, 1440x810, 1280x800, 1152x648 and 960x540. 960x540 has run in a game so far, the others passed the installer's check. All five are experimental on 8 Elite: not tested there yet.

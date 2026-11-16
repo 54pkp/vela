@@ -101,8 +101,9 @@ on2, dx2 = sgsr3.launch_on(on, "student", True, dx)
 assert on2 == 'WINEDLLOVERRIDES="dxgi=n,b" OPTI_SGSR3_STUDENT=1 /usr/libexec/armada/armada-game-launch %command% -dx12' and dx2, on2
 assert sgsr3.launch_on("", "v1f", False) == ('WINEDLLOVERRIDES="dxgi=n,b" %command%', False)
 assert sgsr3.launch_on("", "v1", False)[0] == 'WINEDLLOVERRIDES="dxgi=n,b" OPTI_SGSR3_V1CS=1 %command%'
-on3, _ = sgsr3.launch_on(on2, "v1f", True, True, fg=True)
-assert on3 == 'WINEDLLOVERRIDES="dxgi=n,b" OPTI_SGSRFG=1 /usr/libexec/armada/armada-game-launch %command% -dx12', on3
+# NOFG: an older Vela's SGSR-FG token goes with ours, none is written again
+on3, _ = sgsr3.launch_on('WINEDLLOVERRIDES="dxgi=n,b" OPTI_SGSRFG=1 /usr/libexec/armada/armada-game-launch %command% -dx12', "v1f", True, True)
+assert on3 == 'WINEDLLOVERRIDES="dxgi=n,b" /usr/libexec/armada/armada-game-launch %command% -dx12', on3
 # the key of 0.4.11-0.4.15 (TU autotune, not supported on A740) goes away with ours
 assert sgsr3.strip_ours("TU_AUTOTUNE_FLAGS=preempt_optimize x %command%") == "x %command%"
 assert "TU_AUTOTUNE" not in sgsr3.strip_ours(on3, True)
@@ -137,8 +138,9 @@ assert sgsr3.ini_get(ini, "Menu", "ShortcutKey") == "-1" and sgsr3.ini_get(ini, 
 assert sgsr3.ini_get(ini, "FrameGen", "Enabled") == "false" and sgsr3.ini_get(ini, "fakenvapi", "ForceReflex") == "auto"
 assert sgsr3.ini_get(ini, "Framerate", "FramerateLimit") == "auto"
 ini2 = sgsr3.make_ini(template, {"fg": True, "latency": True, "fps": "30"})
-assert sgsr3.ini_get(ini2, "FrameGen", "Enabled") == "true" and sgsr3.ini_get(ini2, "FrameGen", "FGInput") == "upscaler"
-assert sgsr3.ini_get(ini2, "FrameGen", "FGOutput") == "fsrfg" and sgsr3.ini_get(ini2, "OptiFG", "HUDFix") == "true"
+# NOFG: frame generation off whatever an older Vela stored
+assert sgsr3.ini_get(ini2, "FrameGen", "Enabled") == "false" and sgsr3.ini_get(ini2, "FrameGen", "FGInput") == "auto"
+assert sgsr3.ini_get(ini2, "FrameGen", "FGOutput") == "auto" and sgsr3.ini_get(ini2, "OptiFG", "HUDFix") == "auto"
 assert sgsr3.ini_get(ini2, "fakenvapi", "ForceReflex") == "2" and sgsr3.ini_get(ini2, "fakenvapi", "ForceLatencyFlex") == "true"
 assert sgsr3.ini_get(ini2, "Framerate", "FramerateLimit") == "30"
 assert len(ini2.splitlines()) == len(template.splitlines()), "every key exists in the template"
@@ -182,7 +184,7 @@ assert profiles.env_tokens("998") == ["OPTI_SGSR3_SQ=1"]
 del profiles.PROFILES["998"]
 st = r["status"]
 assert st["installed"] and st["intact"] and st["opts"] == {**sgsr3.DEFAULT_OPTS, "smooth": "sharp", "algo": "v1f"}, st["opts"]
-assert st["opts"]["algo"] == "v1f" and st["opts"]["ratio"] == "2.0" and not st["opts"]["fg"]
+assert st["opts"]["algo"] == "v1f" and st["opts"]["ratio"] == "2.0" and "fg" not in st["opts"]
 assert st["modes"]["quality"] == {"algo": "v1f", "ratio": "1.5"}, st["modes"]
 # modes elsewhere: Vela AI (the student) at 720p / 540p / 480p
 assert s3.status("111")["opts"]["algo"] == "student" and s3.status("111")["modes"]["speed"] == {"algo": "student", "ratio": "2.25"}
@@ -213,18 +215,16 @@ assert open(os.path.join(win64, ".upscale-sgsr3/backup/dxgi.dll"), "rb").read() 
 assert s3.read_state(win64)["resolution_prev"] == "1280x720", "first resolution is the one to restore"
 assert sgsr3.ini_get(open(os.path.join(win64, "OptiScaler.ini")).read(), "UpscaleRatio", "UpscaleRatioOverrideValue") == "auto"  # 0.8.15: no override
 
-# frame generation on: FidelityFX DLL in, SGSR-FG variable; off again: the file goes, the variable too
+# NOFG: an older Vela's "fg": True is ignored: no SGSR-FG variable, FrameGen off, the option not kept
 r3 = s3.enable("1178830", {"fg": True}, r2["launch_options"], None)
-assert open(os.path.join(win64, "amd_fidelityfx_dx12.dll"), "rb").read() == b"ffx sdk 1.1.4"
-assert "OPTI_SGSRFG=1" in r3["launch_options"] and "OPTI_SGSR3_STUDENT=1" in r3["launch_options"], r3
-assert sgsr3.ini_get(open(os.path.join(win64, "OptiScaler.ini")).read(), "FrameGen", "FGOutput") == "fsrfg"
+assert "OPTI_SGSRFG=1" not in r3["launch_options"] and "OPTI_SGSR3_STUDENT=1" in r3["launch_options"], r3
+assert sgsr3.ini_get(open(os.path.join(win64, "OptiScaler.ini")).read(), "FrameGen", "FGOutput") == "auto"
 st3 = s3.set_ini("1178830", {"latency": True, "fps": "30"})
 ini3 = open(os.path.join(win64, "OptiScaler.ini")).read()
 assert sgsr3.ini_get(ini3, "fakenvapi", "ForceLatencyFlex") == "true" and sgsr3.ini_get(ini3, "Framerate", "FramerateLimit") == "30"
-assert sgsr3.ini_get(ini3, "FrameGen", "Enabled") == "true", "set_ini keeps the other options"
-assert st3["opts"]["fps"] == "30" and st3["opts"]["fg"]
+assert sgsr3.ini_get(ini3, "FrameGen", "Enabled") == "false"
+assert st3["opts"]["fps"] == "30" and "fg" not in st3["opts"]
 r2 = s3.enable("1178830", {"fg": False}, r3["launch_options"], None)
-assert not os.path.exists(os.path.join(win64, "amd_fidelityfx_dx12.dll"))
 assert "OPTI_SGSRFG=1" not in r2["launch_options"] and "OPTI_SGSR3_STUDENT=1" in r2["launch_options"]
 try:
     s3.clean_opts({"fps": "25"})
@@ -255,7 +255,7 @@ write(os.path.join(win64, "OptiScaler.log"), "SGSR3 v1f: v1f v1b fragment, compa
       "lock, thin-feature locks, temporal box hp (RG8), shaderFloat16 on\nInitializing SGSR3 1280x720 -> 1920x1080\n"
       "LowLatency algo: LatencyFlex\nSGSR-FG: on\n")
 lg = s3.status("1178830")["log"]
-assert lg["mode"] == "v1f" and lg["hp"] and lg["fg"] == "on" and lg["low_latency"] == "LatencyFlex", lg
+assert lg["mode"] == "v1f" and lg["hp"] and "fg" not in lg and lg["low_latency"] == "LatencyFlex", lg  # NOFG: no SGSR-FG field
 assert not lg["lines2"]
 write(os.path.join(win64, "OptiScaler.log"), "SGSR3 v1f: v1f v1b fragment, shaderFloat16 OFF\n"
       "SGSR3: v1f (Vulkan interop) is not available; SGSR 3 v1 compute instead\nInitializing SGSR3 1280x720 -> 1920x1080\n")
@@ -362,8 +362,7 @@ r = s3.enable("111", {}, "")
 stj = s3.read_state(uni)
 del stj["files"]["amd_fidelityfx_dx12.dll"]
 s3._write_state(uni, stj)
-r = s3.enable("111", {"fg": True}, r["launch_options"])  # backs the game's file up before replacing it
-assert open(os.path.join(uni, "amd_fidelityfx_dx12.dll"), "rb").read() == b"ffx sdk 1.1.4"
+r = s3.enable("111", {}, r["launch_options"])  # NOFG: no FG install of the FidelityFX DLL over the game's own; a re-enable keeps it
 s3.disable("111", r["launch_options"])
 assert tree(uni) == before, tree(uni)
 os.remove(os.path.join(uni, "amd_fidelityfx_dx12.dll"))
@@ -396,7 +395,7 @@ write(os.path.join(tmp, "staticfsr", "dxgi.dll"), b"vela interceptor")
 before = tree(re4)
 lo0 = "/usr/libexec/armada/armada-game-launch %command%"
 st = s3.status("2050650")
-assert st["static_fsr2"]["algo"] == "ai" and st["static_fsr2"]["env"] == ["VELA_RCAS=0"] and "Ambient Occlusion" in st["profile"]["hint"] and "960×540" in st["profile"]["hint"] and st["opts"]["algo"] == "student" and not st["fg_available"]
+assert st["static_fsr2"]["algo"] == "ai" and st["static_fsr2"]["env"] == ["VELA_RCAS=0"] and "hint" not in st["profile"] and st["opts"]["algo"] == "student" and "fg_available" not in st  # NOMSG 2026-11-11: no game-specific message
 r = s3.enable("2050650", {"mode": "balance"}, lo0, "Default")
 assert r["launch_options"] == ('WINEDLLOVERRIDES="dxgi=n,b" VELA_FSR2=replace RECON_LEVEL=1 VELA_RCAS=0 '
                                + lo0), r["launch_options"]

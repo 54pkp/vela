@@ -1,4 +1,4 @@
-# Third-party notices: Vela 0.8.21 (`vela-0.8.21.zip`, md5 b37a51f642436a86f84207522a5e3633)
+# Third-party notices: Vela 0.8.22 (`vela-0.8.22.zip`, md5 62e37fe31d92c1e04e31b6cf0efb6470)
 
 Every file in the release zip, who wrote it and under which licence. Licence texts are inside the zip in
 `upscale/assets/licenses/` (paths below are zip paths). "Ours" = written by the Vela developer.
@@ -7,7 +7,7 @@ Every file in the release zip, who wrote it and under which licence. Licence tex
 
 | zip path | md5 | what | origin | licence | source / notes |
 |---|---|---|---|---|---|
-| `upscale/assets/sgsr3/OptiScaler.dll` | 48a888ee9ccb654f527d368fcf2623c3 | our OptiScaler fork, ARM64EC; installed into the game as `dxgi.dll` | OptiScaler (optiscaler/OptiScaler) via justradical/Sloptiscaler `f80e4da3` + our patches 0001–0008, 0010–0021 | **GPL-3.0** | `licenses/OptiScaler-GPL-3.0.txt`; corresponding source: `fork/` in this repository |
+| `upscale/assets/sgsr3/OptiScaler.dll` | cc76b47269c20214a665c4a618d8a4ff | our OptiScaler fork, ARM64EC; installed into the game as `dxgi.dll` | OptiScaler (optiscaler/OptiScaler) via justradical/Sloptiscaler `f80e4da3` + our patches 0001–0008, 0010–0021 | **GPL-3.0** | `licenses/OptiScaler-GPL-3.0.txt`; corresponding source: `fork/` in this repository |
 | — inside that DLL | | fakenvapi | fakenvapi (merged into OptiScaler) | MIT | `licenses/fakenvapi-MIT.txt` |
 | — inside that DLL | | LatencyFleX header / logic | Tatsuyuki Ishi | Apache-2.0 | `licenses/LatencyFleX-Apache-2.0.txt` |
 | — inside that DLL | | Snapdragon Game Super Resolution (SGSR 2) and our SGSR-derived kernels | Qualcomm | BSD-3-Clause | `licenses/SGSR-BSD-3-Clause-Qualcomm.txt` |
@@ -18,14 +18,14 @@ Every file in the release zip, who wrote it and under which licence. Licence tex
 | `upscale/assets/sgsr3/OptiPatcher.asi` | 270137987e5f58b0cb371a6e38c2fedb | OptiPatcher v0.42 (44b8106, x64), unmodified | optiscaler/OptiPatcher | MIT | `licenses/OptiPatcher-MIT.txt` |
 | `upscale/assets/sgsr3/OptiScaler.ini` | 0c456787… | OptiScaler config template of the fork | OptiScaler | GPL-3.0 | as the DLL |
 | `upscale/assets/staticfsr/dxgi.dll` | 7b476fc53bd73441134a6c5f1d5a2b35 | Resident Evil 4 interceptor of the game's built-in FSR 2 (ARM64EC) | ours; links Microsoft Detours | ours: GPL-3.0-only (`LICENSING.md`); Detours: MIT (`licenses/Detours-MIT.txt`) | source: `interceptor/` |
-| `upscale/assets/npu/libVkLayer_VELA_npu.so` | 2f438a25a73197d8eacb5b5422416286 | Vulkan layer that sends the FSR 4 network to the NPU daemon (aarch64 Linux) | ours; Khronos Vulkan headers | ours: GPL-3.0-only; Vulkan headers: Apache-2.0 / MIT | source: `npu-layer/` |
-| `upscale/assets/npu/VkLayer_VELA_npu.json` | 82231f80… | layer manifest | ours | GPL-3.0-only, as the plugin | — |
+| `upscale/assets/npu/libVkLayer_VELA_npu.so` | fe623ee91b56a5760913341a790682bd | Vulkan layer that sends the FSR 4 network to the NPU daemon (aarch64 Linux) | ours; Khronos Vulkan headers | ours: GPL-3.0-only; Vulkan headers: Apache-2.0 / MIT | source: `npu-layer/` |
+| `upscale/assets/npu/VkLayer_VELA_npu.json` | bcef6f72… | layer manifest | ours | GPL-3.0-only, as the plugin | — |
 
 ## The plugin itself (ours)
 
 | zip path | licence |
 |---|---|
-| `upscale/main.py`, `upscale/py_modules/*.py` (anygame, cpuboost, device, gamecfg, gamecheck, gameutil, gpufloor, latency, live, npu, presets, profiles, report, sgsr3, upscale) | GPL-3.0-only (`upscale/LICENSE`) |
+| `upscale/main.py`, `upscale/py_modules/*.py` (anygame, cpuboost, device, dxgi_quirks, gamecfg, gamecheck, gameutil, gpufloor, latency, launchopts, live, nofg, npu, presets, profiles, report, sgsr3, updater, upscale, vela_launch, velakit) | GPL-3.0-only (`upscale/LICENSE`) |
 | `upscale/dist/index.js` | our panel code (GPL-3.0-only), bundled with `@decky/api` 1.1.3 (LGPL-2.1, SteamDeckHomebrew), the icon component of `react-icons` 5.7.0 (MIT) and one Lucide icon (`LuScanEye`, ISC). `@decky/ui` is provided by Decky Loader at run time and is not bundled. Licence texts: `licenses/decky-api-1.1.3-LGPL-2.1.txt`, `licenses/react-icons-5.7.0-MIT.txt`, `licenses/Lucide-ISC.txt` |
 | `upscale/plugin.json`, `upscale/package.json`, `upscale/LICENSE` | ours, GPL-3.0-only (template origin: Steam Deck Homebrew decky-plugin-template, BSD-3-Clause, notice kept in `licenses/decky-plugin-template-BSD-3-Clause.txt`) |
 | `upscale/assets/sgsr3/VERSION.json` | ours, GPL-3.0-only (build labels; some labels are older than the files, they do not change behaviour) |

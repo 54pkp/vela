@@ -90,7 +90,7 @@ assert (o["mode"], o["fsr4_fallback"], o["sgsr2_instead"]) == ("sgsr2", "failed"
 
 # panel: the fourth card, name + note (English only since 0.8.16), NPU status for Fast like FSR 4
 ts = open(os.path.join(HERE, "..", "src", "strings.ts"), encoding="utf-8").read()
-assert 'MODEL_IDS: ModelId[] = ["fsr4", "fsr4fast", "fsr3", "sgsr2"]' in ts
+assert 'MODEL_IDS: ModelId[] = ["fsr4", "fsr4fast", "fsr3", "sgsr2"];' in ts  # NOFSR (2026-11-11): FSR 4 for any game out again
 en = open(os.path.join(HERE, "..", "src", "i18n", "en.json"), encoding="utf-8").read()  # EN: English texts only
 assert 'fsr4fast: "FSR 4 Fast"' in ts and re.search(r'"model.note.fsr4fast": "AMD neural network · [^"]+"', en)
 tsx = open(os.path.join(HERE, "..", "src", "index.tsx"), encoding="utf-8").read()

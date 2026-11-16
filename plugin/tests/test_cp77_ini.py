@@ -16,7 +16,8 @@ with open(os.path.join(ROOT, "assets", "sgsr3", "OptiScaler.ini"), encoding="utf
 
 assert profiles.ini_overrides("1091500") == {("Spoofing", "Dxgi"): "false"}
 assert profiles.ini_overrides(1091500) == {("Spoofing", "Dxgi"): "false"}  # int appid too
-assert profiles.ini_overrides("870780") == {} and profiles.ini_overrides("") == {}
+assert profiles.ini_overrides("870780") == {("Spoofing", "Dxgi"): "true"}  # fgtest7: Control keeps true over its quirk
+assert profiles.ini_overrides("") == {}
 assert sgsr3.ini_values({"appid": "1091500"})[("Spoofing", "Dxgi")] == "false"
 assert sgsr3.ini_values({"appid": "1091500"})[("Spoofing", "StreamlineSpoofing")] == "true"
 for other in ("870780", "1178830", "2239710", ""):

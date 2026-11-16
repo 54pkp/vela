@@ -108,13 +108,47 @@ class Live:
         values = clean({**raw, **({"model": model} if model else {})})
         try:
             os.makedirs(self.dir, exist_ok=True)
-            with open(self._json(appid), "w", encoding="utf-8") as f:
-                json.dump(values, f, indent=1)
+            self._write_json(appid, values)
             self._write_tmp(appid, values)
             self.log(f"live {appid}: old settings {({k: raw[k] for k in ('model',) + RETIRED_KEYS if k in raw})} -> {values}")
         except OSError as e:
             self.log(f"live {appid}: migrate: {e}")
         return values
+
+    def _write_json(self, appid, values):
+        """V04: the stored values through a temporary file + rename (a crash mid-write left a cut JSON = no settings)."""
+        tmp = self._json(appid) + ".new"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(values, f, indent=1)
+        os.replace(tmp, self._json(appid))
+
+    def ensure(self):
+        """V04 (audit 2026-11-09): the /tmp file of every game with stored values is there. It carries the model and the NPU
+        keys (launch options carry none since 0.8.15) and was written only at plugin start and on a change; when /tmp is
+        cleaned while the plugin runs (systemd-tmpfiles removes files not used for 10 days; anything else that empties /tmp)
+        the next start of that game ran the default model on the GPU while the panel showed the stored one. One stat per
+        game on each pass of the 10 s loop; an existing file is never rewritten. Returns the appids written again."""
+        try:
+            names = os.listdir(self.dir)
+        except OSError:
+            return []
+        back = []
+        for name in names:
+            if not name.endswith(".json"):
+                continue
+            appid = name[:-5]
+            if os.path.exists(os.path.join(TMP_DIR, f"{appid}.ini")):
+                continue
+            values = self.get(appid)
+            if not values:
+                continue
+            try:
+                self._write_tmp(appid, values)
+                back.append(appid)
+                self.log(f"live {appid}: the /tmp file was gone, written again: {values}")
+            except OSError as e:
+                self.log(f"live {appid}: {e}")
+        return back
 
     def _write_tmp(self, appid, values):
         os.makedirs(TMP_DIR, exist_ok=True)
@@ -142,8 +176,7 @@ class Live:
         values = clean(values)
         os.makedirs(self.dir, exist_ok=True)
         if values:
-            with open(self._json(appid), "w", encoding="utf-8") as f:
-                json.dump(values, f, indent=1)
+            self._write_json(appid, values)
         elif os.path.exists(self._json(appid)):
             os.remove(self._json(appid))
         self._write_tmp(appid, values)

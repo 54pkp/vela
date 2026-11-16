@@ -28,10 +28,11 @@ assert gamecheck.verdict({**SCAN, "install_dir": "/g"}, {"opengl"}, appid="31234
 
 # the backend passes the appid, the panel has the text and offers no Steam FSR 1 line for it (nothing can be judged)
 with open(os.path.join(ROOT, "main.py"), encoding="utf-8") as fh:
-    assert "ag_assets=False, appid=appid)" in fh.read()
+    src = fh.read()  # 0.8.22: ag_assets = the any-game layer (anyfsr4) is in the plugin and the chip has FSR 4
+    assert "ag_assets=False, appid=appid)" in src  # NOFG: no any-game kind
 with open(os.path.join(ROOT, "src", "i18n", "en.json"), encoding="utf-8") as fh:
     en = json.load(fh)
-assert en["reason.non_steam"] == "Vela works with Steam games for now; non-Steam shortcuts (Heroic, Lutris…) are not supported yet"
+assert en["reason.non_steam"].startswith("Vela cannot find this non-Steam game's folder")  # 0.8.22: shortcuts work
 assert en["reason.not_installed"] == "the game is not installed"
 with open(os.path.join(ROOT, "src", "index.tsx"), encoding="utf-8") as fh:
     assert re.search(r'const fsr1 = .*"not_installed", "non_steam"', fh.read())

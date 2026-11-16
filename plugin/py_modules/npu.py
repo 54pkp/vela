@@ -74,6 +74,7 @@ FULL_GRAPHS = ("nf4_exact.bin", "nf4_k1h.bin", "nf4_k1h_360.bin", K1H450_GRAPH, 
 # for a unit it does not know, so the first one asked decides: package 14 asks the one daemon; package 13 and older must not
 # ask vela-npu.service, or their failed unit reads "inactive" (or the old Lite daemon "active"), and start at the second
 STATE_UNITS = (UNIT, OLD_UNITS["k1h_unit"])
+UNIT_UNKNOWN = "unknown"       # service()["unit_state"] when systemctl gave no answer at all
 MODES = (0, 1, 2)              # live key npu: off, exact (same output, no extra latency), async (+1 frame)
 CACHE_S = 30.0
 LOG_TAIL = 256 * 1024
@@ -150,15 +151,25 @@ def socket_listening(proc_net_unix="/proc/net/unix", name=K1H_SOCKET):
         return False
 
 
+# why the last unit_active() gave no state (for the plugin log, Npu._unit_state)
+unit_read_error = None
+
+
 def unit_active(unit=UNIT):
-    # 0.8.21: with the unit really failed the panel read no state at all: Decky's process runs under FEX with its own
-    # library path, and 1 s was short for that. The same clean environment as report.py; the cause is not proven yet.
+    # 0.8.21: with the unit really failed the panel read no state at all (R821). The same clean environment as report.py. On a
+    # real systemd this environment does not empty the answer; a missing systemctl or no reachable manager does (PC bench,
+    # bench/in_systemd.py). Which of them happens under FEX is not proven: the reason now goes to the log.
+    global unit_read_error
     env = {k: v for k, v in os.environ.items() if k not in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONHOME", "PYTHONPATH")}
     try:
         r = subprocess.run(["systemctl", "is-active", unit], capture_output=True, text=True, timeout=3.0, env=env)
-        return r.stdout.strip() or None  # "active", "inactive", "failed", "activating"
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as e:
+        unit_read_error = f"{type(e).__name__}: {e}"
         return None
+    state = r.stdout.strip()  # "active", "inactive", "failed", "activating"
+    if not state:
+        unit_read_error = f"exit {r.returncode}: {r.stderr.strip()[-200:]}"
+    return state or None
 
 
 class Npu:
@@ -176,6 +187,7 @@ class Npu:
         self._graph_dir = graph_dir
         self._svc = None
         self._svc_at = 0.0
+        self._unit_err_logged = None
 
     # -- the service: installed / running, cached (the panel asks on every refresh)
 
@@ -207,12 +219,16 @@ class Npu:
         return dict(self._svc)
 
     def _unit_state(self, pkg14=True):
-        """What systemctl says about the first of the installed package's STATE_UNITS it answers for (None: no answer)."""
+        """What systemctl says about the first of the installed package's STATE_UNITS it answers for; UNIT_UNKNOWN: no answer,
+        which says nothing about the unit (it may have failed), and the panel must not claim it is just not running."""
         for u in STATE_UNITS if pkg14 else STATE_UNITS[1:]:
             state = self._systemctl(u)
             if state:
                 return state
-        return None
+        if unit_read_error != self._unit_err_logged:
+            self._unit_err_logged = unit_read_error
+            self.log(f"npu: systemctl gave no unit state: {unit_read_error}")
+        return UNIT_UNKNOWN
 
     def layer_found(self):
         return os.path.isfile(os.path.join(self.assets, LIB)) and os.path.isfile(os.path.join(self.assets, MANIFEST))
@@ -261,6 +277,16 @@ class Npu:
             os.remove(path)
             self.log(f"npu: layer manifest removed ({path})")
         return False
+
+    def manifest_out(self):
+        """V08 (audit 2026-11-09): plugin uninstall: our manifest leaves the user's layer dir (it names a library inside the
+        plugin folder that is about to go). The next plugin start writes it again (sync_manifest). True: it was there."""
+        path = self._installed_path()
+        if not os.path.exists(path):
+            return False
+        os.remove(path)
+        self.log(f"npu: layer manifest removed at uninstall ({path})")
+        return True
 
     # -- per game state and launch options (exact restore like anygame)
 
@@ -311,6 +337,8 @@ class Npu:
             return launch_options
         # 0.8.17: the layer's own tokens in front, exactly those out again (launchopts); the player's stay as they are
         if st.get("on"):
+            if launch_options is not None:  # V01 (audit 2026-11-09): the player's edit since is the new "before the layer"
+                st["launch_prev"] = launchopts.remove(launch_options, self.record(st))
             new, rec = launchopts.replace(launch_options or "", self.record(st), tokens)  # changed since: ours again
         else:
             st = {"on": True, "launch_prev": launch_options, "installed_at": time.time()}
@@ -345,8 +373,10 @@ class Npu:
             self._write(appid, st)
         return changed
 
-    def disable(self, appid, launch_options):
-        """Launch options without the layer: exactly the previous ones if nobody touched them since."""
+    def disable(self, appid, launch_options, dry=False):
+        """Launch options without the layer: exactly the previous ones if nobody touched them since.
+        dry (V09, audit 2026-11-09): only the answer; the state stays (the caller commits with a second call once the
+        steps after it, which may raise, are through)."""
         st = self.read(appid)
         if not st or not st.get("on"):
             return launch_options
@@ -354,6 +384,8 @@ class Npu:
             restored = st.get("launch_prev") or ""
         else:
             restored = launchopts.remove(launch_options, self.record(st))  # 0.8.17: only the layer's own tokens
+        if dry:
+            return restored
         try:
             os.remove(self._state_path(appid))
         except OSError:

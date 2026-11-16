@@ -24,6 +24,9 @@ XPROP = "/usr/bin/xprop"
 ATOMS = ("GAMESCOPE_NEW_SCALING_FILTER", "GAMESCOPE_FSR_SHARPNESS")
 # keys of 0.8.14 and older that steered Gamescope: dropped once Steam's own filter is back
 OLD_KEYS = ("games", "post", "enabled")
+# V12 (audit 2026-11-09): the restore is tried on the first RETRY_FAST passes of the 10 s loop, then on one pass in
+# RETRY_EVERY (5 min): a missing tool or desktop mode cost two process starts and a log line every 10 s, for ever
+RETRY_FAST, RETRY_EVERY = 6, 30
 
 
 class Upscaler:
@@ -33,6 +36,9 @@ class Upscaler:
         self.log = log
         self.lock = threading.Lock()
         self.cfg = {"sgsr3": []}
+        # V12: a new install (no settings file yet) has no older Vela's filter to undo: the migration counts as done
+        # (it started as soon as one game was set up and the plugin started again)
+        fresh = not os.path.exists(self.path)
         try:
             with open(self.path, encoding="utf-8") as f:
                 self.cfg.update(json.load(f))
@@ -40,8 +46,11 @@ class Upscaler:
             pass
         # an older Vela may have pushed a filter: a profile, a stretch, or Linear for a game it upscaled
         old = any(self.cfg.get(k) for k in ("games", "post")) or bool(self.cfg.get("sgsr3"))
+        if fresh:
+            self.cfg["gamescope_reset"] = True
         self.reset_pending = old and not self.cfg.get("gamescope_reset")
         self.atoms = {}
+        self._tries, self._said = 0, None
 
     def _save(self):
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
@@ -77,6 +86,11 @@ class Upscaler:
 
     def _read_atoms_once(self):
         r = subprocess.run([XPROP, "-root", *ATOMS], env=self._env(), capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            # V12: xprop could not read the root window. Going on pushed the defaults "linear, 2" and marked the
+            # migration done: Gamescope on Linear while Steam's menu shows FSR. (An atom Steam never set is another
+            # case: xprop exits 0 and says "not found"; Gamescope's own default is the right answer then.)
+            raise RuntimeError(f"xprop: exit {r.returncode} {(r.stderr or '').strip()[:200]}")
         self._parse(r.stdout)
 
     def _parse(self, text):
@@ -92,13 +106,18 @@ class Upscaler:
         False while Gamescope cannot be reached (the reconcile loop tries again)."""
         if not self.reset_pending:
             return False
+        self._tries += 1
+        if self._tries > RETRY_FAST and (self._tries - RETRY_FAST) % RETRY_EVERY:
+            return False  # V12: after the first tries, one pass in RETRY_EVERY
         try:
             self._read_atoms_once()
             filt, sharp = self._steam_choice()
             self._ctl("scaling_filter", filt)
             self._ctl("scaling_sharpness", sharp)
         except (OSError, subprocess.SubprocessError, RuntimeError) as e:
-            self.log(f"upscale: Steam's filter not restored yet: {e}")
+            if str(e) != self._said:  # V12: the same reason once, not on every pass
+                self._said = str(e)
+                self.log(f"upscale: Steam's filter not restored yet: {e} (tried again every {RETRY_EVERY * 10 // 60} min)")
             return False
         with self.lock:
             for k in OLD_KEYS:

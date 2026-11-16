@@ -38,6 +38,11 @@ SCHEMA = 1
 SHORT_RUN_S = 180
 CLEAN_EXIT = ("Unloading OptiScaler", "DLL_PROCESS_DETACH")
 KEEP_PENDING = 50
+# UPX1 (owner 2026-11-07, VELA-G82PTL / VELA-RBHAC9): the panel asked, in the game he played, about runs of two other games from the
+# day before (the newest unanswered question of any game, any age). It asks about this game's runs of the last day only.
+PENDING_MAX_AGE_S = 24 * 3600
+# NOFG (2026-11-15): the lp0 layer (frame generation, FSR 4 for any game) is out of Vela: no layer runs are kept or asked about any
+# more (UPX1's <appid>-layer-<date>-<time>.log runs of an older build stay where they are)
 # raw caps before compression (an OptiScaler Debug log reaches 9 MB); the head keeps the Init lines, the tail the end
 RUN_HEAD, RUN_TAIL = 1 << 20, 5 << 20
 NPU_TAIL = 1 << 20
@@ -173,6 +178,73 @@ def anon_for(home, extra_hosts=()):
 
 # ---- what went wrong in a run --------------------------------------------------------------------------------------
 
+_RX_RUN_NAME = re.compile(r"^\d+-(?:layer-)?(\d{8})-(\d{6})\.log$")
+
+
+def run_end_from_name(name):
+    """RPT1: the end of a kept run from its file name (<appid>[-layer]-YYYYMMDD-HHMMSS.log, the local time it was kept), epoch
+    seconds; None for any other name (a live log, the game folder's OptiScaler.log)."""
+    m = _RX_RUN_NAME.match(name or "")
+    if not m:
+        return None
+    try:
+        return time.mktime(time.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S"))
+    except (ValueError, OverflowError):
+        return None
+
+
+_RX_NPU_PID = re.compile(r"^\[vela-npu (\d+) ", re.M)
+
+
+def npu_session(text):
+    """RPT2 (2026-11-11, VELA-H63SA7): the NPU layer's log holds every session of the game (one per process); its counters
+    ("N jobs, HTP, timeouts T, errors E") are per session. Only the last session is this run's: its lines from the "loaded"
+    lines right before the first line of the last process id to the end. A log without process ids is returned as it is.
+    H63SA7's two timeouts were in the previous, healthy run (pid 22202, 33 000 jobs), not in the reported one (pid 29888)."""
+    pids = _RX_NPU_PID.findall(text or "")
+    if not pids:
+        return text
+    lines = text.splitlines(keepends=True)
+    tag = f"[vela-npu {pids[-1]} "
+    i = next(n for n, ln in enumerate(lines) if ln.startswith(tag))
+    while i > 0 and lines[i - 1].startswith("Vela NPU layer: loaded"):
+        i -= 1
+    return "".join(lines[i:])
+
+
+RUN_STARTS_KEEP = 60
+VELA_MARKS = ("vela-launch", "VELA_NPU=", "LP0_ENABLE=", "VELA_LAUNCH_DONE=")
+
+
+def launch_command(appid, proc="/proc"):
+    """RPT5: Steam's launch of the game as it runs now: the command line of its oldest "SteamLaunch AppId=<id>" process after
+    AppId (Steam's launch options with %command% expanded). None: the game does not run, or /proc cannot be read."""
+    key = ("AppId=" + str(appid)).encode()
+    try:
+        pids = sorted((x for x in os.listdir(proc) if x.isdigit()), key=int)
+    except OSError:
+        return None
+    for pid in pids:
+        try:
+            with open(os.path.join(proc, pid, "cmdline"), "rb") as f:
+                parts = f.read(65536).split(b"\0")
+        except OSError:
+            continue
+        if b"SteamLaunch" in parts and key in parts:
+            rest = [x.decode("utf-8", "replace") for x in parts[parts.index(key) + 1:] if x]
+            if rest and rest[0] == "--":
+                rest = rest[1:]
+            return " ".join(rest)
+    return None
+
+
+def vela_in_cmd(cmd):
+    """RPT5: Vela is in a launch command (its launcher, or the any-game layer's / NPU layer's own variables). None: no command."""
+    if not isinstance(cmd, str):
+        return None
+    return any(m in cmd for m in VELA_MARKS)
+
+
 def log_duration(text):
     """Seconds from the first to the last [HH:MM:SS] line (OptiScaler.log and the interceptor's log), None without two."""
     ts = _RX_TS.findall(text or "")
@@ -207,22 +279,39 @@ def assess(log_text, summary=None, kernel=None, npu_layer=None, intercept=False,
         "npu_fallback": (n.get("reason") or "fallback") if n.get("state") == "fallback" else None,
         "npu_fallbacks": n.get("fallbacks") or 0,
         "npu_errors": (layer.get("errors") or 0) + (layer.get("timeouts") or 0),
+        "npu_timeouts": layer.get("timeouts") or 0,
         "mode": s.get("mode"),
         # 0.8.20: causes the panel already tells the player (no report needed): the run in DirectX 11, a refused format
         "dx11": s.get("api") == "dx11",
         "out_format": bool(s.get("out_format")),
     }
-    # 0.8.21: an output with no NPU graph is no failure: the GPU path runs and the panel's hint tells it.
+    # 0.8.21: an output with no NPU graph is no failure: the GPU path runs and the panel's hint tells it (VELA-QG5PE2).
     # The flag stays for a report the player sends himself.
     why = [k for k in ("gpu_hang", "gpu_faults", "fsr4_fallback", "sgsr2_instead", "fsr3_fallback", "npu_fallback",
                        "npu_fallbacks", "npu_errors", "short_run")
            if flags[k] and not (k == "npu_fallback" and flags[k] == "size")]
+    # RPT3 (2026-11-11, VELA-9F3B4B): ONE NPU timeout with no NPU error is a recovered job (that frame on the GPU path, "on, exact"
+    # again 0.2 s later): no question for it. The flag stays in a report the player sends himself.
+    if "npu_errors" in why and not (layer.get("errors") or 0) and (layer.get("timeouts") or 0) <= 1:
+        why.remove("npu_errors")
     flags["bad"] = bool(why)
     flags["why"] = why
     return flags
 
 
-# ---- small file helpers ----------------------------------------------------------------------------------------------
+def _mtime(p):
+    try:
+        return os.path.getmtime(p)
+    except (OSError, TypeError):
+        return 0
+
+
+def _size(p):
+    try:
+        return os.path.getsize(p)
+    except (OSError, TypeError):
+        return 0
+
 
 def read_text(path, head=0, tail=None):
     """The file as text; with tail: the first `head` bytes + a cut line + the last `tail` bytes. None when it cannot be read."""
@@ -301,8 +390,9 @@ def multipart(fields, files):
 class Reporter:
     def __init__(self, settings_dir, home, plugin_dir, s3=None, npu=None, live=None, log=print, runner=subprocess.run,
                  now=time.time, urlopen=urllib.request.urlopen, plugin_log_dir=None, anon=None, live_tmp="/tmp/vela-live",
-                 os_release_path="/etc/os-release"):
+                 os_release_path="/etc/os-release", proc_osrelease="/proc/sys/kernel/osrelease", proc="/proc"):
         self.dir = os.path.join(settings_dir, "reports")
+        self.proc_osrelease = proc_osrelease
         self.settings = settings_dir
         self.home = home
         self.plugin_dir = plugin_dir
@@ -319,6 +409,7 @@ class Reporter:
         self._runs = {}    # appid -> when the plugin first saw it running (None: it ran before the plugin started)
         self._ended = {}   # appid -> seconds the last run lasted (None: unknown)
         self._primed = False
+        self.proc = proc  # RPT5: where launch_command() reads the running game's launch
 
     def observe(self, running):
         """Called with gameutil.running_appids() (reconcile loop, panel): the run length the bad-run check needs."""
@@ -326,10 +417,59 @@ class Reporter:
         for a in running:
             if a not in self._runs:
                 self._runs[a] = t if self._primed else None
+                if self._primed:
+                    self._run_started(a, t)
         for a in [a for a in self._runs if a not in running]:
             start = self._runs.pop(a)
+            if start is not None:
+                self._run_ended(a, start, t)
             self._ended[a] = None if start is None else t - start
         self._primed = True
+
+    def _run_started(self, appid, t):
+        """RPT5: the record of a run that starts now: its launch command and whether Vela is in it (never in the way: errors pass)."""
+        try:
+            cmd = launch_command(appid, self.proc)
+            recs = self._read("run_starts.json", [])
+            recs.append({"appid": str(appid), "at": int(t), "cmd": cmd, "vela": vela_in_cmd(cmd)})
+            self._write("run_starts.json", recs[-RUN_STARTS_KEEP:])
+        except Exception as e:
+            self.log(f"report: run start of {appid} not recorded: {e}")
+
+    def _run_ended(self, appid, start, t):
+        try:
+            recs = self._read("run_starts.json", [])
+            for r in reversed(recs):
+                if r.get("appid") == str(appid) and r.get("at") == int(start):
+                    r["end"] = int(t)
+                    self._write("run_starts.json", recs)
+                    break
+        except Exception as e:
+            self.log(f"report: run end of {appid} not recorded: {e}")
+
+    def run_start(self, appid, before=None):
+        """RPT5: the record of the game's run: the newest one, or the newest that started before `before` (a kept log's end)."""
+        recs = [r for r in self._read("run_starts.json", []) if r.get("appid") == str(appid) and isinstance(r.get("at"), int)]
+        if before is not None:
+            recs = [r for r in recs if r["at"] <= before + 5]
+        return max(recs, key=lambda r: r["at"]) if recs else None
+
+    def kit_launch_lines(self, appid, start, end):
+        """RPT5: the kit's launch.log lines (vela-launch writes "YYYY-mm-dd HH:MM:SS msg") inside the run window."""
+        root = getattr(self.s3, "kit_root", None) if self.s3 else None
+        try:
+            path = os.path.join(root(appid), "launch.log") if root else None
+        except Exception:
+            path = None
+        out = []
+        for ln in (read_text(path, 0, 256 << 10) or "").splitlines() if path else []:
+            try:
+                at = time.mktime(time.strptime(ln[:19], "%Y-%m-%d %H:%M:%S"))
+            except (ValueError, OverflowError):
+                continue
+            if start <= at <= end:
+                out.append(ln)
+        return out
 
     # -- settings / state files
 
@@ -392,9 +532,12 @@ class Reporter:
             return 0
         return int(times[-RATE_MAX] + RATE_WINDOW - self.now()) + 1
 
-    def panel(self):
-        """What the panel needs every refresh: set up or not, the uploads left this hour, the run waiting for an answer."""
-        pend = [p for p in self._read("pending.json", []) if p.get("state") == "ask"]
+    def panel(self, appid=None):
+        """What the panel needs every refresh: set up or not, the uploads left this hour, the run waiting for an answer.
+        UPX1: only a run of this game (appid; None = any, the old call) that ended within PENDING_MAX_AGE_S."""
+        t = self.now()
+        pend = [p for p in self._read("pending.json", []) if p.get("state") == "ask"
+                and (appid is None or str(p.get("appid")) == str(appid)) and t - (p.get("at") or 0) <= PENDING_MAX_AGE_S]
         return {"configured": bool(self.relay()), "rate_left": self.rate_left(), "auto_prompt": self.auto_prompt(),
                 "pending": pend[-1] if pend else None}
 
@@ -416,12 +559,14 @@ class Reporter:
             raise FileNotFoundError(name)
         if running and self.s3:
             try:
-                sc = self.s3.scan(appid)
-                p = os.path.join(sc["exe_dir"], self.s3.kit(appid)["log"]) if sc.get("exe_dir") else None
+                p = self._kit_file(appid, None)  # V21: the kit's folder in an overlay setup, not the game's exe folder
                 if p and os.path.isfile(p):
                     return p, "live " + os.path.basename(p)
             except Exception:
                 pass
+        return self._kit_log(appid, logs) or (None, None)
+
+    def _kit_log(self, appid, logs):
         if logs:
             rx = re.compile(re.escape(str(appid)) + r"-\d{8}-\d{6}\.log$")
             try:
@@ -433,19 +578,45 @@ class Reporter:
             for n in (f"{appid}-OptiScaler.log", f"{appid}-sgsr3intercept.log"):
                 if os.path.isfile(os.path.join(logs, n)):
                     return os.path.join(logs, n), n
-        return None, None
+        return None
 
     def window(self, path, text, running=False):
-        """(start, end) epoch seconds of the run: from the log's first line to its last write (+ margins)."""
+        """(start, end) epoch seconds of the run: from the log's first line to its last write (+ margins).
+        RPT1 (2026-11-11, VELA-HRD5X7 / VELA-PGEA74): a kept run's name holds its end (<appid>[-layer]-YYYYMMDD-HHMMSS.log, local
+        time, written when the run ended); the file's mtime is not the run's (HRD5X7: a copy with the mtime of 2026-10-17 for a run
+        of 2026-11-10; PGEA74: the window landed on the Send, 20 min after the run), so the name wins over the mtime."""
         end = self.now()
         if path and not running:
-            try:
-                end = os.path.getmtime(path)
-            except OSError:
-                pass
+            named = run_end_from_name(os.path.basename(path))
+            if named is not None:
+                end = named
+            else:
+                try:
+                    end = os.path.getmtime(path)
+                except OSError:
+                    pass
         dur = log_duration(text)
         start = end - (dur if dur is not None else WINDOW_DEFAULT)
         return int(start - WINDOW_BEFORE), int((self.now() if running else end) + WINDOW_AFTER)
+
+    def _kit_dir(self, appid):
+        """V21 (audit 2026-11-09): the folder Vela's files for the game are in: the kit's folder in an overlay setup, the
+        game's exe folder in a copy setup (sgsr3.where). The report read the exe folder always: in overlay mode the zip held
+        the previous run's log, no OptiScaler.ini and the md5 of the game's own files. None: unknown."""
+        sc = self.s3.scan(appid)
+        where = getattr(self.s3, "where", None)   # a stand-in without it (tests, an older sgsr3): the exe folder, as before
+        d = where(appid, sc) if where and sc.get("exe_dir") else None
+        return d or sc.get("exe_dir") or None
+
+    def _kit_file(self, appid, name):
+        """A file of the game's setup (name), or its live run log (name None: sgsr3._log_path knows where each kind writes)."""
+        d = self._kit_dir(appid)
+        if not d:
+            return None
+        if name:
+            return os.path.join(d, name)
+        log_path = getattr(self.s3, "_log_path", None)
+        return log_path(d, self.s3.kit(appid)) if log_path else os.path.join(d, self.s3.kit(appid)["log"])
 
     def _cmd(self, args, timeout=10):
         try:
@@ -459,6 +630,10 @@ class Reporter:
         out = self._cmd(["journalctl", "_TRANSPORT=kernel", "-q", "--no-pager", "-o", "short-iso", f"--since=@{start}", f"--until=@{end}"])
         if out is None:
             return None
+        # V21: no kernel line at all in the window usually means no access (the plugin process has no supplementary groups),
+        # not a quiet kernel: build() notes it, so "no GPU hang found" is not read as "the kernel log was checked"
+        self.kernel_empty = not out.strip()
+        self.kernel_total = len([x for x in out.splitlines() if x.strip()])  # RPT6: how many kernel lines the window had at all
         return [line for line in out.splitlines() if GPU_RX.search(line)][-KERNEL_LINES:]
 
     def gamescope_lines(self, start, end):
@@ -499,10 +674,12 @@ class Reporter:
         # what is in the game folder now (ours, an older build of ours, or the game's own)
         if self.s3:
             try:
-                sc = self.s3.scan(appid)
-                if sc.get("exe_dir"):
-                    v["game_md5"] = {n: file_md5(os.path.join(sc["exe_dir"], n)) for n in (
+                d = self._kit_dir(appid)  # V21: where Vela's files for the game are (the kit in an overlay setup)
+                if d:
+                    v["game_md5"] = {n: file_md5(os.path.join(d, n)) for n in (
                         "dxgi.dll", "amd_fidelityfx_upscaler_vk.dll", "amd_fidelityfx_dx12.dll", "OptiScaler.ini")}
+                    is_kit = getattr(self.s3, "_is_kit", None)
+                    v["game_md5_dir"] = "kit" if is_kit and is_kit(d) else "game folder"
             except Exception as e:
                 v["game_md5"] = {"error": str(e)}
         # 0.8.20: how the kit reaches the game (wrapper / launcher / copy) and the launcher's last lines
@@ -522,6 +699,13 @@ class Reporter:
             s["arch"] = u.machine
         except (AttributeError, OSError):
             pass
+        # UPX1 (VELA-G82PTL said x86_64 / 6.11.0 on the ARM console): Python may run under an emulator there, whose uname() is its
+        # own; the kernel's file is the device's. Both are kept, the emulated pair under its own name.
+        real = (read_text(self.proc_osrelease) or "").strip()
+        if real and real != s.get("kernel"):
+            s["python_uname"] = {"kernel": s.get("kernel"), "arch": s.get("arch")}
+            s["kernel"] = real
+            s["arch"] = None
         for p in ("/sys/firmware/devicetree/base/model", "/sys/class/dmi/id/product_name"):
             t = read_text(p)
             if t:
@@ -579,17 +763,40 @@ class Reporter:
         path, label = self.run_log(appid, running, log_name)
         run_text = read_text(path, RUN_HEAD, RUN_TAIL) if path else None
         start, end = self.window(path, run_text, running)
+        # RPT5: the reported run's own record (its launch and Vela's state when it STARTED)
+        rec = self.run_start(appid, None if (running or not path or not log_name) else
+                             (run_end_from_name(os.path.basename(path)) or _mtime(path)))
+        # RPT4: a log that ended before the reported run started is an earlier run's (the run itself wrote none: OptiScaler did not
+        # load in it): not attached, not read for the flags; the window is the run's own
+        not_this_run = None
+        if rec and path and not running and not log_name:
+            log_end = run_end_from_name(os.path.basename(path)) or _mtime(path)
+            if log_end is not None and log_end < rec["at"] - 5:
+                tf = lambda x: time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(x))  # noqa: E731
+                not_this_run = (f"no OptiScaler log of this run: OptiScaler did not load in it (the newest log, {label}, ended "
+                                f"{tf(log_end)}, before the run started at {tf(rec['at'])})")
+                errors.append(not_this_run)
+                path, run_text, label = None, None, "none (no log of this run)"
+                start, end = int(rec["at"] - WINDOW_BEFORE), int((rec.get("end") or self.now()) + WINDOW_AFTER)
+        kit_lines = self.kit_launch_lines(appid, (rec["at"] - 30) if rec else start, end)
+        vela_run = rec.get("vela") if rec else None
+        if vela_run is None and kit_lines:
+            last = kit_lines[-1]
+            vela_run = True if "kit on" in last else False if "left out" in last else None
         kernel = self.kernel_lines(start, end)
         if kernel is None:
             errors.append("kernel journal not readable")
+        elif getattr(self, "kernel_empty", False):
+            errors.append("kernel journal empty (no line in the run's window: no access to it, or nothing was logged)")
         gsc = self.gamescope_lines(start, end)
         if gsc is None:
             errors.append("journal not readable")
         npu_path = self.npu.layer_log(appid) if self.npu else None
         npu_text = read_text(npu_path, 0, NPU_TAIL) if npu_path else None
         intercept = bool(path and "intercept" in os.path.basename(path))
-        summary = (game_state or {}).get("sgsr3", {}).get("log") if game_state else None
-        if summary is None and path and self.s3 is not None:
+        is_layer = bool(path and "layer-" in os.path.basename(path))  # a kept run of an older build's lp0 layer (NOFG: no new ones)
+        summary = (game_state or {}).get("sgsr3", {}).get("log") if game_state and not is_layer else None
+        if summary is None and path and self.s3 is not None and not is_layer:
             try:
                 import sgsr3
                 summary = sgsr3.static_log_summary(path) if intercept else sgsr3.log_summary(path)
@@ -599,7 +806,7 @@ class Reporter:
         if npu_text:
             try:
                 import npu as npu_mod
-                layer = npu_mod.parse_layer(npu_text)
+                layer = npu_mod.parse_layer(npu_session(npu_text))  # RPT2: this run's process only
             except Exception:
                 layer = None
         if flags is None and log_name:  # the prompt's run: its flags were taken when it ended (with the run length)
@@ -616,19 +823,40 @@ class Reporter:
             "os": (sysinfo.get("os") or {}).get("PRETTY_NAME"), "mesa": (sysinfo.get("mesa") or [None])[0],
             "proton": (sysinfo.get("proton") or {}).get("version"),
             "log": label, "window": [start, end],
+            "run_start": rec["at"] if rec else None, "vela_in_run": vela_run,
             "flags": {k: v for k, v in fl.items() if k not in ("why",)}, "why": fl.get("why", []),
         }
         if path:
-            files["optiscaler.log"] = A(run_text or "")
+            files["layer.log" if is_layer else "optiscaler.log"] = A(run_text or "")
+        elif not_this_run:
+            files["optiscaler.log"] = not_this_run + "\n"
         if npu_text:
             files["npu_layer.log"] = A(npu_text)
         if game_state is not None:
             files["game_state.json"] = json.dumps(A.obj(game_state), ensure_ascii=False, indent=1)
         files["live.json"] = json.dumps(A.obj(self.live_values(appid)), ensure_ascii=False, indent=1)
-        files["launch_options.txt"] = A(launch if isinstance(launch, str) else "(not read)") + "\n"
+        lo = []
+        if rec is not None:
+            lo.append(f"at the run's start ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(rec['at']))}, Steam's launch as it ran): "
+                      + A(rec.get("cmd") or "(not read)"))
+        else:
+            lo.append("at the run's start: not recorded (the plugin did not see this run start)")
+        lo.append("at Send (Steam's launch options now): " + A(launch if isinstance(launch, str) else "(not read)"))
+        if kit_lines:
+            lo.append("Vela's launcher in the run window:")
+            lo += ["  " + A(x) for x in kit_lines[-20:]]
+        files["launch_options.txt"] = "\n".join(lo) + "\n"
         files["versions.json"] = json.dumps({"versions": vers, "system": A.obj(sysinfo)}, ensure_ascii=False, indent=1)
         if kernel is not None:
-            files["kernel_gpu.txt"] = A("\n".join(kernel)) + "\n"
+            # RPT6 (2026-11-11): kernel_gpu.txt was 1 byte in all 7 player reports: no way to tell "no access", "wrong window" and
+            # "the kernel said nothing about the GPU". The first line now says which: the window and how many kernel lines it held
+            tf = lambda x: time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(x))  # noqa: E731
+            head = (f"# kernel journal {tf(start)} .. {tf(end)}: {getattr(self, 'kernel_total', 0)} kernel lines in the run window, "
+                    f"{len(kernel)} about the GPU / display" + ("" if kernel else " (none: no GPU hang, fault or reset was logged)"))
+            files["kernel_gpu.txt"] = head + "\n" + (A("\n".join(kernel)) + "\n" if kernel else "")
+            meta["kernel_lines"] = getattr(self, "kernel_total", 0)
+        else:
+            files["kernel_gpu.txt"] = "# kernel journal not readable (journalctl failed)\n"
         if gsc is not None:
             files["gamescope.txt"] = A("\n".join(gsc)) + "\n"
         pl = self.plugin_log_lines(appid)
@@ -636,8 +864,8 @@ class Reporter:
             files["plugin.log"] = A("\n".join(pl)) + "\n"
         if self.s3:
             try:
-                sc = self.s3.scan(appid)
-                ini = read_text(os.path.join(sc["exe_dir"], "OptiScaler.ini")) if sc.get("exe_dir") else None
+                p = self._kit_file(appid, "OptiScaler.ini")  # V21
+                ini = read_text(p) if p else None
                 if ini:
                     files["OptiScaler.ini"] = A(ini)
             except Exception:
@@ -718,7 +946,8 @@ class Reporter:
             raise RuntimeError("too_big")
         body, ctype = multipart({"meta": json.dumps(rec["meta"], ensure_ascii=False)},
                                 {"file": (f"vela-{local_id}.zip", data, "application/zip")})
-        self._write("sent.json", self.sent_times() + [self.now()])
+        # V22 (audit 2026-11-09): a try counts against the hourly limit only when the relay answered (ok or an error of its
+        # own). Before, the time was stored before the request: three tries with Wi-Fi off used the limit up for an hour
         req = urllib.request.Request(url, data=body, method="POST",
                                      headers={"Content-Type": ctype, "User-Agent": f"Vela/{rec['meta'].get('plugin')}"})
         kw = {"timeout": 60}
@@ -728,8 +957,11 @@ class Reporter:
             kw["context"] = self._ssl
         try:
             with self._urlopen(req, **kw) as r:
-                ans = json.loads(r.read(4096).decode("utf-8", "replace") or "{}")
+                raw = r.read(4096)
+            self._write("sent.json", self.sent_times() + [self.now()])   # the relay took the upload
+            ans = json.loads(raw.decode("utf-8", "replace") or "{}")
         except urllib.error.HTTPError as e:
+            self._write("sent.json", self.sent_times() + [self.now()])   # the relay answered with an error: its limit counts
             try:
                 ans = json.loads(e.read(4096).decode("utf-8", "replace") or "{}")
             except ValueError:
@@ -771,7 +1003,7 @@ class Reporter:
             try:
                 import npu as npu_mod
                 lt = read_text(self.npu.layer_log(appid), 0, NPU_TAIL)
-                layer = npu_mod.parse_layer(lt) if lt else None
+                layer = npu_mod.parse_layer(npu_session(lt)) if lt else None  # RPT2: this run's process only
             except Exception:
                 layer = None
         if run_s is None:
@@ -816,7 +1048,7 @@ game_state.json    what the panel showed (scan, model, log summary)
 live.json          live settings (model, NPU)
 launch_options.txt Steam launch options of the game
 versions.json      plugin / OptiScaler / provider / NPU layer versions + md5, OS build, kernel, Mesa, Proton
-kernel_gpu.txt     kernel lines about the GPU / display in the run window
+kernel_gpu.txt     kernel lines about the GPU / display in the run window (first line: the window and how many kernel lines it held)
 gamescope.txt      gamescope journal lines in the run window
 plugin.log         Vela's own log lines about this game
 OptiScaler.ini     OptiScaler's settings in the game folder

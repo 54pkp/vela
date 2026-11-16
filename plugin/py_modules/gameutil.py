@@ -27,6 +27,34 @@ def running_appids(proc="/proc"):
     return out
 
 
+def run_started(appid, proc="/proc"):
+    """V03 (audit 2026-11-09): when the game's current run started (epoch seconds): the oldest "SteamLaunch AppId=<id>" process,
+    from its start time in /proc/<pid>/stat (field 22, clock ticks after boot) and the boot time in /proc/stat. None: the game
+    does not run, or the times cannot be read. A log older than this is the previous run's."""
+    key = re.compile(rb"AppId=" + str(appid).encode() + rb"(?!\d)")
+    try:
+        with open(os.path.join(proc, "stat"), "rb") as f:
+            boot = int(re.search(rb"^btime\s+(\d+)", f.read(), re.M).group(1))
+        pids = [p for p in os.listdir(proc) if p.isdigit()]
+    except (OSError, AttributeError, ValueError):
+        return None
+    tck = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
+    best = None
+    for pid in pids:
+        try:
+            with open(os.path.join(proc, pid, "cmdline"), "rb") as f:
+                cmd = f.read(4096)
+            if b"SteamLaunch" not in cmd or not key.search(cmd):
+                continue
+            with open(os.path.join(proc, pid, "stat"), "rb") as f:
+                st = f.read()
+            t = boot + int(st[st.rindex(b")") + 2:].split()[19]) / tck  # field 22; the name (field 2) may hold spaces
+        except (OSError, ValueError, IndexError):
+            continue
+        best = t if best is None else min(best, t)
+    return best
+
+
 def prefix_busy(pfx, proc="/proc"):
     """A Wine process (wineserver included, it writes user.reg when it exits) still runs in this prefix."""
     if not pfx:

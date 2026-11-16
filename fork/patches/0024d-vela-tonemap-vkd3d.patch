@@ -1,0 +1,20 @@
+diff --git a/OptiScaler/upscalers/sgsr2/SGSR2_Shaders.h b/OptiScaler/upscalers/sgsr2/SGSR2_Shaders.h
+index c667fc9..1da1250 100644
+--- a/OptiScaler/upscalers/sgsr2/SGSR2_Shaders.h
++++ b/OptiScaler/upscalers/sgsr2/SGSR2_Shaders.h
+@@ -330,9 +330,12 @@ RWTexture2D<float4> VtOut : register(u0);
+ [numthreads(8, 8, 1)]
+ void CSMain(uint3 tid : SV_DispatchThreadID)
+ {
+-    uint w, h;
+-    VtOut.GetDimensions(w, h);
+-    if (tid.x >= w || tid.y >= h)
++#ifdef VELA_TM_IN
++    uint2 sz = renderSize;   // 0024d: no RWTexture2D::GetDimensions in vkd3d-shader (Proton's D3DCompile): the size from SGSR2Params
++#else
++    uint2 sz = displaySize;
++#endif
++    if (tid.x >= sz.x || tid.y >= sz.y)
+         return;
+     float4 c = VtIn.Load(int3(tid.xy, 0));
+     float pe = preExposure > 0.0f ? preExposure : 1.0f;

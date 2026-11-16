@@ -4,8 +4,8 @@ Base: [justradical/Sloptiscaler](https://github.com/justradical/Sloptiscaler) co
 = ARM64EC build of [OptiScaler](https://github.com/optiscaler/OptiScaler) 10.0.0.1 with an SGSR 2 backend.
 Our changes are the patches in `patches/`, applied in number order. License: GPL-3.0 (`LICENSE`, OptiScaler's).
 
-The `OptiScaler.dll` in Vela 0.8.21 (md5 `48a888ee9ccb654f527d368fcf2623c3`, 18 479 616 bytes) was built from the base +
-**0001–0008 and 0010–0021** (patch 0009 and the experimental upstream-sync patch 0000 are not part of this build and are not
+The `OptiScaler.dll` in Vela 0.8.22 (md5 `cc76b47269c20214a665c4a618d8a4ff`, 18 499 584 bytes) was built from the base +
+**0001–0008, 0010–0021, 0023, 0024 and 0024b–0024d** (patch 0009 and the experimental upstream-sync patch 0000 are not part of this build and are not
 included). Checksums of the patch files: `patches.md5`.
 
 | patch | what |
@@ -21,6 +21,9 @@ included). Checksums of the patch files: `patches.md5`.
 | 0019 | MV pass: converts display-size / jittered motion vectors (DLSS input) to the render-size, non-jittered vectors FSR 4 needs |
 | 0020 | GPU identification without a held lock: fixes the start hang on Snapdragon 8 Elite; `VELA_OPTI_GPUTHREAD=0` turns the early identification off, `VELA_OPTI_LOGLEVEL=<n>` sets the log level |
 | 0021 | an output the upscalers cannot write (R9G9B9E5) goes through an RGBA16F image, then a pack pass and a copy into the game's output |
+| 0023 | a DLSS context that comes without a depth buffer is handled per handle; the game's other contexts keep FSR 4 |
+| 0024 | looks for the depth buffer under another NGX parameter name before giving up; `OPTI_VELA_NODEPTH=1` forces the no-depth path (tests) |
+| 0024b–0024d | a context without depth gets FSR 1 (EASU) of the colour, without history, inside a reversible tonemap that compiles under vkd3d-shader (stopgap, see the 0.8.22 known issues) |
 
 ## Build
 
@@ -44,9 +47,9 @@ Pinned inputs:
 
 ### Reproducing the release DLL
 
-The `OptiScaler.dll` of Vela 0.8.21 (md5 `48a888ee9ccb654f527d368fcf2623c3`) is this build with
+The `OptiScaler.dll` of Vela 0.8.22 (md5 `cc76b47269c20214a665c4a618d8a4ff`) is this build with
 
-    FORK_BUILD_DATE=2026-11-02 sh fork/build/build.sh out
+    FORK_BUILD_DATE=2026-11-11 sh fork/build/build.sh out
 
 A rebuild from a clean clone is byte-identical to the release DLL except two timestamps: the linker's PE timestamp
 (`TimeDateStamp` in the COFF header) and the timestamp of the debug directory entry. With those two fields set to the
