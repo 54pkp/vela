@@ -47,6 +47,63 @@ The numbers in the main README were measured with an earlier NPU package. Packag
 in the games checked (Control 8.32 ms on the NPU). The extension says `ID=armada VERSION_ID=44`; after an armadaOS update with another VERSION_ID,
 systemd-sysext stops loading it and the installer must be run again (it refuses other versions unless `--force`).
 
+## Experimental FSR 4.1.2 Lite graph for Odin 3
+
+[`tools/export_lite_qnn.py`](tools/export_lite_qnn.py) exports the AMD normal 1080p Lite network using the SHA-256-pinned
+`provider/sr4-kernels/tools/weights.bin` initializer. It rebuilds the seven network dispatches between `pass0_post` and K1.
+Vela still performs the prepass, K1 and K2 on the GPU. Ultra Performance with the alternate Lite model is outside this graph.
+
+The native ABI is NHWC U8, with scale 1 and zero point 128. Input `x` has shape `[1,540,960,16]`.
+Output `p3u_o` has shape `[1,270,480,64]` and contains the complete feature plane before pixel shuffle.
+Output `p1f_o` has shape `[1,540,960,16]` and contains neutral U8 codes (128). This preserves the existing three-tensor
+pack/unpack ABI and accumulates the final residual before rounding and saturation.
+
+### Build
+
+Export one ONNX model as a CPU integer reference and another with fixed encodings for the QAIRT importer. Use an isolated
+Python environment with NumPy and ONNX. To make the HTP DLC, set up QAIRT 2.49.0.260730 and run the following commands from
+the repository root with a new output directory or fresh output filenames.
+
+```bash
+python -B npu/tools/export_lite_qnn.py --weights provider/sr4-kernels/tools/weights.bin --output lite-oracle.onnx
+python -B npu/tools/export_lite_qnn.py --weights provider/sr4-kernels/tools/weights.bin --output lite-import.onnx --qairt-encodings fixed.json
+qairt-converter --input_network lite-import.onnx --output_path lite.dlc --target_backend HTP --quantization_overrides fixed.json \
+  --source_model_input_layout x NCHW --desired_input_layout x NHWC \
+  --source_model_output_layout p3u_o NCHW --desired_output_layout p3u_o NHWC \
+  --source_model_output_layout p1f_o NCHW --desired_output_layout p1f_o NHWC
+```
+
+For Windows QAIRT, invoke the converter using the same Python interpreter on the SDK's
+`bin/x86_64-windows-msvc/qairt-converter` script and add the SDK's `lib/python` to `PYTHONPATH`.
+Check the DLC for 8-bit weights and activations and verify all three I/O encodings with `qairt-dlc-info -d`.
+On Odin 3 generate the context from that DLC with the matching AArch64 `qnn-context-binary-generator`, HTP backend,
+ModelDlc and HTP NetRun extension configured with `dsp_arch=v79`, `soc_id=69` and an unsigned PD session.
+The installed QAIRT 2.47 daemon rejected the newer context, so tests used a private daemon built against QAIRT 2.49 and
+a separate socket selected with `VELA_NPUD_NAME`.
+
+### Validation
+
+The CPU integer reference matched all 8,294,400 final network feature codes captured from Vela's native Vulkan Lite path
+on Odin 3 for the same input. The compiled W8A8 DLC ran on HTP v79. At the first convolution its 32,131 differing codes
+were all half-way cases and matched round-half-up exactly. The original Vulkan path uses round-to-nearest-even.
+The final HTP feature plane differed by a mean absolute 1.653 codes and up to 19 codes relative to the captured GPU reference.
+
+At 960×540 → 1920×1080, each path ran the same 48-frame synthetic sequence twice. The Vulkan context measurements
+exclude the first eight submissions of each run. The stock 4.1.1 path used the installed QAIRT 2.47 service and
+`nf4_k1h`. Lite used the private QAIRT 2.49 service. The tested asynchronous Lite path outputs the preceding frame.
+
+| Path | HTP execution P50 in the two runs | Vulkan context P50 / P95 |
+| --- | ---: | ---: |
+| Stock Vela 4.1.1 + NPU | 3.630 / 3.633 ms | 4.105 / 4.158 ms |
+| 4.1.2 Lite GPU | — | 7.761 / 8.017 ms |
+| 4.1.2 Lite + synchronous NPU | 3.155 / 3.207 ms | 10.817 / 10.831 ms |
+| 4.1.2 Lite + asynchronous NPU | 3.250 / 3.225 ms | 4.665 / 4.676 ms |
+
+Both Lite NPU modes completed 94 HTP jobs without errors or timeouts. The final RGB frame of the first asynchronous run
+had a mean absolute difference of 0.00102 versus the time-aligned GPU frame, with a maximum of 0.294. This is one
+synthetic SDR sequence. Game image quality, frame rate, frame pacing and latency are unverified. Keep the graph
+experimental. The system extension and default paths remain unchanged.
+
 ## Security
 - Library search paths: only `/usr/lib64/vela-npu` (`fsr4npud` RPATH, `libcdsp_default_listener` RUNPATH), plus `$ORIGIN`
   on the three unmodified Qualcomm host libraries, which resolves to the same root-owned, read-only folder. The builder

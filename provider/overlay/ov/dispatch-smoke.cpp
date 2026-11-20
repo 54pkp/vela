@@ -1367,16 +1367,18 @@ int main(int argc, char** argv) {
                     pass_count*2,sizeof(times),times.data(),sizeof(uint64_t),VK_QUERY_RESULT_64_BIT),"pass timestamps");
             const uint64_t mask=timestamp_bits>=64 ? ~uint64_t(0) : (uint64_t(1)<<timestamp_bits)-1;
             const auto ms=[&](uint64_t a,uint64_t b) {return double((b-a)&mask)*physical_properties.limits.timestampPeriod/1e6;};
-            double k2_ms=0;
+            double k2_ms=-1;
             if (lite_queries) {
                 const char* const* names=fsr4core::g_lite_profile_names;
                 const auto end=names+fsr4core::g_lite_profile_used/2;
                 const auto k2=std::find_if(names,end,[](const char* name) { return std::strcmp(name,"k2")==0; });
-                if (k2==end) throw std::runtime_error("missing Lite K2 timestamps");
-                std::array<uint64_t,2> stamps{};
-                check(vkGetQueryPoolResults(device,lite_queries,2*(k2-names),2,sizeof(stamps),stamps.data(),
-                    sizeof(uint64_t),VK_QUERY_RESULT_64_BIT),"Lite K2 timestamps");
-                k2_ms=ms(stamps[0],stamps[1]);
+                // The first async submission may only queue prepass work.
+                if (k2!=end) {
+                    std::array<uint64_t,2> stamps{};
+                    check(vkGetQueryPoolResults(device,lite_queries,2*(k2-names),2,sizeof(stamps),stamps.data(),
+                        sizeof(uint64_t),VK_QUERY_RESULT_64_BIT),"Lite K2 timestamps");
+                    k2_ms=ms(stamps[0],stamps[1]);
+                }
             }
             std::vector<uint16_t> cached_pixels(output_size/2);
             std::memcpy(cached_pixels.data(),readback.mapped,output_size);
@@ -1394,7 +1396,7 @@ int main(int argc, char** argv) {
                 benchmark_log << '\"' << (i==0 ? "auto_exposure" : i>=29 ? (i==29 ? "ni_wait" : i==30 ? "ni_pack" : "ni_unpack") : i>=28 ? "post_k2" : is411 ? fsr4::k411PassNames[i-1] : kPasses[i-1].name)
                               << "\":" << ms(times[i*2],times[i*2+1]);
             }
-            if (lite_queries) benchmark_log << "\"k2\":" << k2_ms;
+            if (k2_ms>=0) benchmark_log << "\"k2\":" << k2_ms;
             benchmark_log << "}}\n";
             if(!benchmark_log) throw std::runtime_error("cannot write timing report");
 #else
