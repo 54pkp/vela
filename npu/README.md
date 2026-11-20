@@ -100,9 +100,32 @@ exclude the first eight submissions of each run. The stock 4.1.1 path used the i
 | 4.1.2 Lite + asynchronous NPU | 3.250 / 3.225 ms | 4.665 / 4.676 ms |
 
 Both Lite NPU modes completed 94 HTP jobs without errors or timeouts. The final RGB frame of the first asynchronous run
-had a mean absolute difference of 0.00102 versus the time-aligned GPU frame, with a maximum of 0.294. This is one
-synthetic SDR sequence. Game image quality, frame rate, frame pacing and latency are unverified. Keep the graph
-experimental. The system extension and default paths remain unchanged.
+had a mean absolute difference of 0.00102 versus the time-aligned GPU frame, with a maximum of 0.294, on this synthetic SDR sequence.
+
+### In-game validation on Odin 3
+
+On 2026-11-20, FSR 4.1.2 Lite rendered the town scene in Trails in the Sky 1st Chapter
+(Steam AppID `3447040`, build `26289760`) using the Hexagon NPU on an AYN Odin 3 running armadaOS.
+The game-local DX11-to-DX12 bridge was rebuilt to accept `Fsr4Lite` on the existing game-specific path.
+The Lite run used `model=fsr4lite`, `lossy=1`, `npu=2`, and a private QAIRT 2.49 daemon running the W8A8
+`lite_fixed_float` graph on HTP v79. Stock Vela used its installed QAIRT 2.47 daemon and 4.1.1 graph.
+This is an opt-in setup with a separately built v79 context. The standard NPU installer described above provides the stock path.
+
+All four samples used the same town save and fixed camera, 1129×635 render resolution, 1920×1080 SDR output,
+and frame generation disabled. Each measured window lasted about 20 seconds. Loading samples were excluded.
+HTP execution P50 comes from the full daemon session, including warm-up.
+
+| Path and run | Avg. FPS | Frame time P50 / P99 | Avg. GPU load | Avg. CPU load | HTP exec. P50 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Stock 4.1.1, first run | 53.7 | 18.43 / 22.00 ms | 95.8% | 37.5% | 4.657 ms |
+| 4.1.2 Lite, first run | 52.6 | 18.75 / 25.42 ms | 94.3% | 41.1% | 3.652 ms |
+| Stock 4.1.1, matched repeat | 54.2 | 18.31 / 23.21 ms | 96.7% | 34.0% | 4.599 ms |
+| 4.1.2 Lite, matched repeat | 54.6 | 18.24 / 20.82 ms | 97.2% | 31.8% | 3.705 ms |
+
+Lite completed 6,381 HTP jobs across the two valid sessions with zero daemon errors and zero fallbacks in the
+recorded provider counters. HTP execution time fell by about 19% in the matched repeat, while FPS and GPU load were
+similar. GPU frequency held at 1100 MHz across the four samples. GPU temperature peaked at 103°C in the first Lite run.
+The test covered one stationary scene. It did not measure NPU utilization, power, latency, or image quality in motion.
 
 ## Security
 - Library search paths: only `/usr/lib64/vela-npu` (`fsr4npud` RPATH, `libcdsp_default_listener` RUNPATH), plus `$ORIGIN`

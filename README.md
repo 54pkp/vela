@@ -145,8 +145,9 @@ not an official AMD product.
 <details>
 <summary><b>Does it work on the AYN Odin 3 and other Snapdragon 8 Elite devices?</b></summary>
 
-Yes, experimentally: install the NPU part as above. We have not had a Snapdragon 8 Elite device to try it on, so please send a report and tell us
-how it runs.
+Yes on Odin 3, where FSR 4 on the NPU has been tested in games. This branch also has an opt-in FSR 4.1.2 Lite graph that ran on
+the Odin 3 NPU in Trails in the Sky 1st Chapter. See the [setup and in-game results](npu/README.md#in-game-validation-on-odin-3)
+for the tested configuration.
 </details>
 
 ## Known issues
