@@ -24,10 +24,7 @@ included). Checksums of the patch files: `patches.md5`.
 | 0023 | a DLSS context that comes without a depth buffer is handled per handle; the game's other contexts keep FSR 4 |
 | 0024 | looks for the depth buffer under another NGX parameter name before giving up; `OPTI_VELA_NODEPTH=1` forces the no-depth path (tests) |
 | 0024b–0024d | a context without depth gets FSR 1 (EASU) of the colour, without history, inside a reversible tonemap that compiles under vkd3d-shader (stopgap, see the 0.8.22 known issues) |
-
-Patch 0025 adds native 24-bit depth sampling when the paired Vela Vulkan provider reports it.
-Without that capability the bridge keeps the existing fallback. The 32-bit floating-point
-depth formats retain their own dispatch path.
+| 0025 | passes native 24-bit depth to providers that support sampling it, with the existing fallback otherwise |
 
 ## Build
 

@@ -1,7 +1,7 @@
 # Vela FSR 4 provider for Vulkan: complete corresponding source
 
 `upscale/assets/sgsr3/amd_fidelityfx_upscaler_vk.dll` in the Vela 0.8.21 zip is built from this folder. The build is reproducible: it fixes the image
-base of the DLL, pins the MinGW packages and checks the Vulkan-Headers commit. `build.sh` prints the md5 of the DLL; it must be `d230a1208c5ad78b6ea573536d41184f`.
+base of the DLL, pins the MinGW packages and checks the Vulkan-Headers commit. `build.sh` prints the md5 of the DLL.
 
 ## License
 - Provider code (fsr4vk's own code and the Vela changes in `overlay/`): **GPL-3.0** (`fsr4vk/LICENSES/GPL-3.0.txt`).
@@ -29,25 +29,18 @@ base of the DLL, pins the MinGW packages and checks the Vulkan-Headers commit. `
 | `vela_assets/fsr411` | the FSR 4.1.1 shader/initializer bundles the DLL embeds (Vela's modified passes) |
 | `build/` | `dll_build_prv.sh` (the DLL build, runs in `ubuntu:24.04`), `prv_tools.py` (embed only `fsr411/`), `build_bench_prv.sh` (aarch64 test bench), `prv_overlay.py` (the exact edit that removed 4.0.2, as applied to the previous sources) |
 
-## Depth inputs
-
 The Vulkan provider samples 24-bit depth directly from the game's image when the driver
 supports sampling that format and the bridge supplies its exact Vulkan format. For
 depth/stencil images the sampled view covers only the depth aspect. The 32-bit float depth
 and existing R32 color inputs retain their original format mapping. The bridge still
 normalizes forward-Z inputs where required by FSR 4.
 
-Compile and run the CPU format regression test in
-[overlay/ov2/depth-input-test.cpp](overlay/ov2/depth-input-test.cpp) with a C++20 compiler
-and Vulkan headers. The test requires no Vulkan loader.
-
 ## Build
 
-The expected DLL checksum below is for the original Vela 0.8.21 provider. This branch
-adds native depth support and produces a different DLL.
 1. Install Docker. From this folder run `sh build.sh` (Linux, macOS or Git Bash on Windows; ~10 min, network needed).
 2. The build log must end with `PASS: frozen inputs, AMD64 exports, asset identities and normal/debug modes`.
-3. `md5sum out/amd_fidelityfx_upscaler_vk.dll` must print `d230a1208c5ad78b6ea573536d41184f`. What makes the result the same on every run:
+3. The original Vela 0.8.21 DLL has md5 `d230a1208c5ad78b6ea573536d41184f`. Source changes, including native
+   depth support, change this checksum. The reproducible build pins the following inputs:
    - base image `ubuntu:24.04` with the MinGW packages pinned in `build/dll_build_prv.sh` (`g++-mingw-w64-x86-64-posix 13.2.0-6ubuntu1+26.1`,
      `binutils-mingw-w64-x86-64 2.41.90.20240122-1ubuntu1+11.4`; the versions are printed at the top of `out/build.log`);
    - Vulkan-Headers `v1.4.367`, checked against commit `9fbc2a782ee3f8a4db64e7d991e23da75e893f44`;
@@ -55,3 +48,5 @@ adds native depth support and produces a different DLL.
    - `SOURCE_DATE_EPOCH=1793577600`.
    A newer MinGW package in the Ubuntu archive than the pinned one makes the build stop at install time instead of giving a different DLL.
 4. Optional checks of the generated kernels: `sh sr4-kernels/build.sh`, `sh spirv-sources/build.sh` and `sh spirv-sources/build_amd.sh` (each rebuilds its headers and compares them with `overlay/gen`, `overlay/ov` and `overlay/ov2`).
+5. Compile and run [the CPU depth format test](build/depth-input-test.cpp) with a C++20 compiler and Vulkan headers.
+   The test requires no Vulkan loader.

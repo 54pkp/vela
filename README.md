@@ -60,8 +60,6 @@ You need **armadaOS** with **Decky Loader**, and a game that offers **DLSS, FSR 
 
 Other games with DLSS, FSR 2/3 or XeSS should work too. Tell us how it goes: [Report a problem](#report-a-problem).
 
-[Kingdom Come: Deliverance II](docs/games/kingdom-come-deliverance-2/README.md) can use FSR 4 with a per-game depth setting.
-
 ## Install
 
 > [!NOTE]
@@ -155,6 +153,11 @@ how it runs.
 
 - Do not use the Decky **OptiScaler** plugin and Vela on the same game.
 - Before uninstalling Vela, set your games to **Off**.
+- In Vela 0.8.22, **Kingdom Come: Deliverance II** can fall back to SGSR 2 with `depth format VkFormat 129`.
+  For that build, close the game, back up any `user.cfg` in the install folder beside `system.cfg`, and set `r_DepthBits = 32`
+  in `user.cfg`. Create the file only if it is missing. Restart the game, select **FSR 4** in Vela and **DLSS** in-game.
+  This workaround was verified on Odin 3 with Proton Experimental (ARM64), Steam build 23914554, and 600 successful NPU
+  jobs in the test log. To revert, restore the previous value or remove the added setting, then restart the game.
 
 ## Privacy
 

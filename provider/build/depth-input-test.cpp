@@ -1,5 +1,5 @@
-#include "depth-input.hpp"
-#include "../../fsr4vk/provider/input-formats.hpp"
+#include "../overlay/ov2/depth-input.hpp"
+#include "../fsr4vk/provider/input-formats.hpp"
 
 #include <cassert>
 
