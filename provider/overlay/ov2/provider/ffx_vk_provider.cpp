@@ -38,6 +38,16 @@
 
 namespace {
 constexpr ffxStructType_t kBackendVkDescType = 3u;
+constexpr ffxStructType_t kQueryNativeDepth = 0x56454C4144513031ull; // VELADQ01
+constexpr ffxStructType_t kDispatchNativeDepth = 0x56454C4144443031ull; // VELADD01
+struct QueryNativeDepth {
+    ffxQueryDescHeader header;
+    std::uint32_t supportedFormats;
+};
+struct DispatchNativeDepth {
+    ffxDispatchDescHeader header;
+    std::uint32_t depthFormat;
+};
 constexpr ffxStructType_t kFsr4VulkanApiVersionDescType =
     0x46535234564b4150ull;
 struct CreateBackendVkDesc {
@@ -78,6 +88,7 @@ struct ProviderContext {
     std::uint64_t version = kVersion411Id;
     VkDevice device = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    std::uint32_t nativeDepthFormats = 0;
     PFN_vkGetDeviceProcAddr getDeviceProcAddr = nullptr;
     std::uint32_t apiVersion = VK_API_VERSION_1_1;
     std::optional<bool> robust_buffer_access, native_mixed_dot_enabled;
@@ -326,6 +337,13 @@ ffxReturnCode_t releaseVulkanDevice(ffxQueryDescVkReleaseDevice* query) noexcept
 
 ffxReturnCode_t queryUpscale(ffxContext* context, ffxQueryDescHeader* header) {
     switch (header->type) {
+    case kQueryNativeDepth: {
+        auto& query = *reinterpret_cast<QueryNativeDepth*>(header);
+        query.supportedFormats = 0;
+        if (!context || !*context) return FFX_API_RETURN_ERROR_PARAMETER;
+        query.supportedFormats = static_cast<ProviderContext*>(*context)->nativeDepthFormats;
+        return FFX_API_RETURN_OK;
+    }
     case FSR4VK_QUERY_DESC_TYPE_DEVICE_FEATURES:
         reinterpret_cast<Fsr4VkQueryDeviceFeatures*>(header)->version=1;
         return FFX_API_RETURN_OK;
@@ -480,6 +498,12 @@ static ffxReturnCode_t createContextImpl(
         provider->lite_npu=reinterpret_cast<const VelaNpuDesc*>(node)->mode;
     provider->device = backend->device;
     provider->physicalDevice = backend->physicalDevice;
+    for (auto format : {VK_FORMAT_X8_D24_UNORM_PACK32, VK_FORMAT_D24_UNORM_S8_UINT}) {
+        VkFormatProperties properties{};
+        vkGetPhysicalDeviceFormatProperties(provider->physicalDevice, format, &properties);
+        if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)
+            provider->nativeDepthFormats |= fsr4vk::d24_capability(format);
+    }
     provider->getDeviceProcAddr = backend->getDeviceProcAddr;
     provider->apiVersion = findVulkanApiVersion(header);
     for(auto* node=header;node;node=node->pNext) if(node->type==FSR4VK_CREATE_DESC_TYPE_DEVICE_FEATURES) {
@@ -745,10 +769,21 @@ static ffxReturnCode_t dispatchImpl(
         const bool packed_output=d.output.description.format==FFX_API_SURFACE_FORMAT_R11G11B10_FLOAT;
         const uint32_t depth_stencil=FFX_API_RESOURCE_USAGE_DEPTHTARGET | FFX_API_RESOURCE_USAGE_STENCILTARGET;
         const uint32_t depth_usage=d.depth.description.usage & depth_stencil;
-        // The host marks real depth images separately from R32 color images.
-        // D32-only and D32S8 must both be sampled through the DEPTH aspect.
-        const auto depth_format=depth_usage==FFX_API_RESOURCE_USAGE_STENCILTARGET
-            ? VK_FORMAT_UNDEFINED : fsr4vk::depth_view_format(depth_usage);
+        VkFormat depth_format=VK_FORMAT_UNDEFINED;
+        bool native_depth_supplied=false;
+        for(auto* node=d.header.pNext;node;node=node->pNext) {
+            if(node->type!=kDispatchNativeDepth) continue;
+            if(native_depth_supplied) throw std::invalid_argument("duplicate native depth format descriptor");
+            native_depth_supplied=true;
+            depth_format=static_cast<VkFormat>(reinterpret_cast<const DispatchNativeDepth*>(node)->depthFormat);
+            if(!fsr4vk::valid_d24_input(depth_format,provider->nativeDepthFormats,
+                                      (depth_usage&FFX_API_RESOURCE_USAGE_DEPTHTARGET)!=0,
+                                      (depth_usage&FFX_API_RESOURCE_USAGE_STENCILTARGET)!=0))
+                throw std::invalid_argument("depth: unsupported native D24 VkFormat="+std::to_string(depth_format)+
+                    " or incompatible depth/stencil usage");
+        }
+        if(!native_depth_supplied && depth_usage!=FFX_API_RESOURCE_USAGE_STENCILTARGET)
+            depth_format=fsr4vk::depth_view_format(depth_usage);
         const auto color_format=shared_exponent_color ? FFX_API_SURFACE_FORMAT_R9G9B9E5_SHAREDEXP :
             (packed_color ? FFX_API_SURFACE_FORMAT_R11G11B10_FLOAT : FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT);
         const auto color_vk_format=shared_exponent_color ? VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 :
@@ -757,7 +792,7 @@ static ffxReturnCode_t dispatchImpl(
             FFX_API_RESOURCE_STATE_COMPUTE_READ,"R16G16B16A16_FLOAT, R11G11B10_FLOAT, R9G9B9E5_SHAREDEXP");
         const auto depth = resource("depth",d.depth,rw,rh,FFX_API_SURFACE_FORMAT_R32_FLOAT,
             depth_format,FFX_API_RESOURCE_STATE_COMPUTE_READ,
-            "R32_FLOAT (R32_SFLOAT with no depth flags; D32_SFLOAT with DEPTHTARGET; D32_SFLOAT_S8_UINT with both depth/stencil flags)",
+            "R32_FLOAT (R32_SFLOAT color, D32_SFLOAT, D32_SFLOAT_S8_UINT, or D24 with matching native format metadata)",
             depth_format==VK_FORMAT_UNDEFINED ? 0 : depth_usage);
         // Native metadata wins over the legacy environment override. It belongs
         // to this dispatch, so resource/preset changes cannot reuse stale formats.

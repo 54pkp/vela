@@ -29,7 +29,22 @@ base of the DLL, pins the MinGW packages and checks the Vulkan-Headers commit. `
 | `vela_assets/fsr411` | the FSR 4.1.1 shader/initializer bundles the DLL embeds (Vela's modified passes) |
 | `build/` | `dll_build_prv.sh` (the DLL build, runs in `ubuntu:24.04`), `prv_tools.py` (embed only `fsr411/`), `build_bench_prv.sh` (aarch64 test bench), `prv_overlay.py` (the exact edit that removed 4.0.2, as applied to the previous sources) |
 
+## Depth inputs
+
+The Vulkan provider samples 24-bit depth directly from the game's image when the driver
+supports sampling that format and the bridge supplies its exact Vulkan format. For
+depth/stencil images the sampled view covers only the depth aspect. The 32-bit float depth
+and existing R32 color inputs retain their original format mapping. The bridge still
+normalizes forward-Z inputs where required by FSR 4.
+
+Compile and run the CPU format regression test in
+[overlay/ov2/depth-input-test.cpp](overlay/ov2/depth-input-test.cpp) with a C++20 compiler
+and Vulkan headers. The test requires no Vulkan loader.
+
 ## Build
+
+The expected DLL checksum below is for the original Vela 0.8.21 provider. This branch
+adds native depth support and produces a different DLL.
 1. Install Docker. From this folder run `sh build.sh` (Linux, macOS or Git Bash on Windows; ~10 min, network needed).
 2. The build log must end with `PASS: frozen inputs, AMD64 exports, asset identities and normal/debug modes`.
 3. `md5sum out/amd_fidelityfx_upscaler_vk.dll` must print `d230a1208c5ad78b6ea573536d41184f`. What makes the result the same on every run:

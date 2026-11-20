@@ -1,0 +1,104 @@
+diff --git a/OptiScaler/upscalers/sgsr3/Fsr4VkBridge.h b/OptiScaler/upscalers/sgsr3/Fsr4VkBridge.h
+--- a/OptiScaler/upscalers/sgsr3/Fsr4VkBridge.h
++++ b/OptiScaler/upscalers/sgsr3/Fsr4VkBridge.h
+@@ -106,6 +106,30 @@
+ using PfnCreate = ffxReturnCode_t (*)(ffxContext*, ffxApiHeader*, const void*);
+ using PfnDestroy = ffxReturnCode_t (*)(ffxContext*, const void*);
+ using PfnDispatch = ffxReturnCode_t (*)(ffxContext*, const ffxApiHeader*);
++using PfnQuery = ffxReturnCode_t (*)(ffxContext*, ffxApiHeader*);
++
++// Optional Vela provider extension for normalized depth sampled in its original format.
++constexpr ffxStructType_t kQueryNativeDepth = 0x56454C4144513031ull; // VELADQ01
++constexpr ffxStructType_t kDispatchNativeDepth = 0x56454C4144443031ull; // VELADD01
++struct QueryNativeDepth
++{
++    ffxApiHeader header;
++    uint32_t supportedFormats;
++};
++struct DispatchNativeDepth
++{
++    ffxApiHeader header;
++    uint32_t depthFormat;
++};
++constexpr uint32_t D24Capability(VkFormat format)
++{
++    switch (format)
++    {
++    case VK_FORMAT_X8_D24_UNORM_PACK32: return 1u << 0;
++    case VK_FORMAT_D24_UNORM_S8_UINT: return 1u << 1;
++    default: return 0;
++    }
++}
+
+ constexpr ffxStructType_t kCreateUpscale = 0x00010000u, kDispatchUpscale = 0x00010001u, kBackendVk = 3u,
+                           kOverrideVersion = 5u, kDeviceFeatures = 0x4653523444455643ull;
+@@ -436,6 +460,12 @@
+             _ctx = nullptr;
+             return false;
+         }
++        if (auto query = reinterpret_cast<Fsr4Vk::PfnQuery>(GetProcAddress(_dll, "ffxQuery")))
++        {
++            Fsr4Vk::QueryNativeDepth depthSupport { { Fsr4Vk::kQueryNativeDepth, nullptr }, 0 };
++            if (query(&_ctx, &depthSupport.header) == 0)
++                _nativeDepthFormats = depthSupport.supportedFormats;
++        }
+         if (!MakeFlush(device))
+             return false;
+         if ((_mvDisplay || _mvJittered || _mvForce) && !MvInit())
+@@ -474,6 +504,14 @@
+         Img in[3], out;
+         if (!Get(color, in[0], false) || !Get(dep, in[1], true) || !Get(mv, in[2], false) || !Get(output, out, false))
+             return false;
++        const auto d24 = Fsr4Vk::D24Capability(in[1].fmt);
++        if (d24)
++        {
++            const auto desc = dep.res->GetDesc();
++            if (!(_nativeDepthFormats & d24) || (desc.Flags & D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE) ||
++                desc.SampleDesc.Count != 1)
++                return Unsupported("depth", in[1].fmt);
++        }
+         // Vela 0.8.16 MV: the pass when the vectors are not what the provider takes (see Init)
+         const bool mvPass = _mvDisplay || _mvJittered || _mvForce || FfxFormat(in[2].fmt) != Fsr4Vk::RG16F;
+         VkImageView mvSrc = VK_NULL_HANDLE;
+@@ -492,6 +530,14 @@
+         d.output = Res(out, _dw, _dh, Fsr4Vk::kStateUav, Fsr4Vk::kUsageUav);
+         if (!d.color.description.format)
+             return Unsupported("colour", in[0].fmt);
++        Fsr4Vk::DispatchNativeDepth nativeDepth { { Fsr4Vk::kDispatchNativeDepth, nullptr },
++                                                   static_cast<uint32_t>(in[1].fmt) };
++        if (d24)
++        {
++            // The SDK's surface-format enum cannot distinguish D24 from the float depth alias.
++            d.depth.description.format = Fsr4Vk::R32F;
++            d.header.pNext = &nativeDepth.header;
++        }
+         if (!d.depth.description.format)
+             return Unsupported("depth", in[1].fmt);
+         if (!d.motionVectors.description.format)
+@@ -575,6 +621,7 @@
+             _interop = nullptr;
+         }
+         _ready = false;
++        _nativeDepthFormats = 0;
+         _frames = 0;
+         // the provider DLL stays loaded (contexts of other features may still use it)
+     }
+@@ -631,8 +678,8 @@
+         _interop->GetVulkanImageLayout(t.res, t.state, &img.layout);
+         if (depth)
+         {
+-            const bool stencil = img.fmt == VK_FORMAT_D32_SFLOAT_S8_UINT;
+-            const bool d = stencil || img.fmt == VK_FORMAT_D32_SFLOAT;
++            const bool stencil = img.fmt == VK_FORMAT_D32_SFLOAT_S8_UINT || img.fmt == VK_FORMAT_D24_UNORM_S8_UINT;
++            const bool d = stencil || img.fmt == VK_FORMAT_D32_SFLOAT || img.fmt == VK_FORMAT_X8_D24_UNORM_PACK32;
+             img.aspect = d ? (VkImageAspectFlags) (VK_IMAGE_ASPECT_DEPTH_BIT | (stencil ? VK_IMAGE_ASPECT_STENCIL_BIT : 0))
+                            : (VkImageAspectFlags) VK_IMAGE_ASPECT_COLOR_BIT;
+             img.depthUsage = d ? (Fsr4Vk::kUsageDepth | (stencil ? Fsr4Vk::kUsageStencil : 0u)) : 0u;
+@@ -1120,6 +1167,7 @@
+     uint64_t _frames = 0;
+     int _failLogged = 0;
+     bool _ready = false;
++    uint32_t _nativeDepthFormats = 0;
+     bool _v402 = false;
+     bool _lite = false;
+     uint32_t _every = 1;

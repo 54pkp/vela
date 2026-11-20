@@ -25,6 +25,10 @@ included). Checksums of the patch files: `patches.md5`.
 | 0024 | looks for the depth buffer under another NGX parameter name before giving up; `OPTI_VELA_NODEPTH=1` forces the no-depth path (tests) |
 | 0024b–0024d | a context without depth gets FSR 1 (EASU) of the colour, without history, inside a reversible tonemap that compiles under vkd3d-shader (stopgap, see the 0.8.22 known issues) |
 
+Patch 0025 adds native 24-bit depth sampling when the paired Vela Vulkan provider reports it.
+Without that capability the bridge keeps the existing fallback. The 32-bit floating-point
+depth formats retain their own dispatch path.
+
 ## Build
 
 Needs Docker on an x86-64 host and network access (GitHub, Docker Hub, Ubuntu mirrors). From the repository root:
@@ -46,6 +50,8 @@ Pinned inputs:
 | build date | OptiScaler stores it in its version resource: today's date, or `FORK_BUILD_DATE=YYYY-MM-DD` |
 
 ### Reproducing the release DLL
+
+Use the original v0.8.22 source for the release checksum below. The build in this branch also applies patch 0025.
 
 The `OptiScaler.dll` of Vela 0.8.22 (md5 `cc76b47269c20214a665c4a618d8a4ff`) is this build with
 

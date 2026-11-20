@@ -15,6 +15,7 @@
 // Size-dependent here: aux grid ceil(render / 64) and SPD constants, the colour copy, the exposure mip. SR4 skipped frames index
 // the feature plane by render pixel (sr_r4 assumes render == 960x540), so other sizes run the network every frame (N = 1).
 // 640x360 (ratio 3.0, width <= 641) is another AMD model (4 modules + weights differ): rejected, the host falls back.
+#include "depth-input.hpp"
 #include "fsr412lite-blobs.hpp"
 #include "vela_npu_abi.h"
 #include "vela_npu_ext.h"
@@ -107,8 +108,7 @@ public:
             if (im->view) continue;
             VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
             vi.image = im->image; vi.viewType = VK_IMAGE_VIEW_TYPE_2D; vi.format = im->format;
-            const bool dfmt = im->format == VK_FORMAT_D32_SFLOAT_S8_UINT || im->format == VK_FORMAT_D32_SFLOAT;
-            vi.subresourceRange = {dfmt ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            vi.subresourceRange = {fsr4vk::external_sample_aspect(im->format), 0, 1, 0, 1};
             check(vkCreateImageView(device, &vi, nullptr, &im->view), "Lite external image view");
             made.push_back(im->view);
         }

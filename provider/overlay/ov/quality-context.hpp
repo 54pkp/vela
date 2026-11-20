@@ -10,6 +10,7 @@
 #include "buffer-memory-policy.hpp"
 #include "descriptor-layout.hpp"
 #include "resource-adoption.hpp"
+#include "depth-input.hpp"
 #include "timestamp-policy.hpp"
 #include "model11-row-bounds.hpp"
 #include "../provider/vulkan_device_features.hpp"
@@ -906,8 +907,7 @@ public:
             if (!image->view) {
                 VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
                 vi.image=image->image; vi.viewType=VK_IMAGE_VIEW_TYPE_2D; vi.format=image->format;
-                const bool depth_format=image->format==VK_FORMAT_D32_SFLOAT_S8_UINT || image->format==VK_FORMAT_D32_SFLOAT;
-                vi.subresourceRange={depth_format ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+                vi.subresourceRange={fsr4vk::external_sample_aspect(image->format),0,1,0,1};
                 check(vkCreateImageView(device,&vi,nullptr,&image->view),"external image view");
                 adopt_resource(frame.views,image->view,[&](auto view){vkDestroyImageView(device,view,nullptr);});
             }
