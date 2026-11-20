@@ -60,6 +60,8 @@ You need **armadaOS** with **Decky Loader**, and a game that offers **DLSS, FSR 
 
 Other games with DLSS, FSR 2/3 or XeSS should work too. Tell us how it goes: [Report a problem](#report-a-problem).
 
+[Kingdom Come: Deliverance II](docs/games/kingdom-come-deliverance-2/README.md) can use FSR 4 with a per-game depth setting.
+
 ## Install
 
 > [!NOTE]
