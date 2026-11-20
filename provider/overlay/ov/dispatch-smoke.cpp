@@ -528,6 +528,7 @@ int main(int argc, char** argv) {
     VkInstance instance = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
     VkQueryPool benchmark_queries = VK_NULL_HANDLE;
+    VkQueryPool lite_queries = VK_NULL_HANDLE;
     VkSampler sampler = VK_NULL_HANDLE;
     VkCommandPool command_pool = VK_NULL_HANDLE;
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
@@ -606,6 +607,12 @@ int main(int argc, char** argv) {
             VkQueryPoolCreateInfo info{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
             info.queryType=VK_QUERY_TYPE_TIMESTAMP; info.queryCount=2;
             check(vkCreateQueryPool(device,&info,nullptr,&benchmark_queries),"benchmark query pool");
+#if !defined(FSR4_EXTERNAL_PROVIDER)
+            if (test_lite) {
+                info.queryCount=2*std::size(fsr4core::g_lite_profile_names);
+                check(vkCreateQueryPool(device,&info,nullptr,&lite_queries),"Lite pass query pool");
+            }
+#endif
         }
         command_pipeline_barrier2 = promoted_dispatch.cmd_pipeline_barrier2;
         get_buffer_device_address = promoted_dispatch.get_buffer_device_address;
@@ -1327,12 +1334,23 @@ int main(int argc, char** argv) {
                 vkCmdResetQueryPool(command_buffer,benchmark_queries,0,2);
                 promoted_dispatch.cmd_write_timestamp2(command_buffer,VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,benchmark_queries,0);
             }
+#if !defined(FSR4_EXTERNAL_PROVIDER)
+            if (lite_queries) {
+                vkCmdResetQueryPool(command_buffer,lite_queries,0,2*std::size(fsr4core::g_lite_profile_names));
+                fsr4core::g_lite_profile_pool=lite_queries;
+                fsr4core::g_lite_profile_used=0;
+            }
+#endif
             const auto begin_cpu=std::chrono::steady_clock::now();
             record_context();
+#if !defined(FSR4_EXTERNAL_PROVIDER)
+            fsr4core::g_lite_profile_pool=VK_NULL_HANDLE;
+#endif
             record_cpu_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin_cpu).count();
             if (benchmark_queries)
                 promoted_dispatch.cmd_write_timestamp2(command_buffer,VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,benchmark_queries,1);
         };
+        uint64_t profile_output_hash=0;
         const auto collect_profile = [&](unsigned frame_index) {
             if (!benchmark_queries) return;
 #if !defined(FSR4_EXTERNAL_PROVIDER)
@@ -1349,21 +1367,34 @@ int main(int argc, char** argv) {
                     pass_count*2,sizeof(times),times.data(),sizeof(uint64_t),VK_QUERY_RESULT_64_BIT),"pass timestamps");
             const uint64_t mask=timestamp_bits>=64 ? ~uint64_t(0) : (uint64_t(1)<<timestamp_bits)-1;
             const auto ms=[&](uint64_t a,uint64_t b) {return double((b-a)&mask)*physical_properties.limits.timestampPeriod/1e6;};
+            double k2_ms=0;
+            if (lite_queries) {
+                const char* const* names=fsr4core::g_lite_profile_names;
+                const auto end=names+fsr4core::g_lite_profile_used/2;
+                const auto k2=std::find_if(names,end,[](const char* name) { return std::strcmp(name,"k2")==0; });
+                if (k2==end) throw std::runtime_error("missing Lite K2 timestamps");
+                std::array<uint64_t,2> stamps{};
+                check(vkGetQueryPoolResults(device,lite_queries,2*(k2-names),2,sizeof(stamps),stamps.data(),
+                    sizeof(uint64_t),VK_QUERY_RESULT_64_BIT),"Lite K2 timestamps");
+                k2_ms=ms(stamps[0],stamps[1]);
+            }
             std::vector<uint16_t> cached_pixels(output_size/2);
             std::memcpy(cached_pixels.data(),readback.mapped,output_size);
             const auto* pixels=cached_pixels.data();
             for(size_t i=0;i<output_size/2;++i)
                 if((pixels[i]&0x7c00)==0x7c00) throw std::runtime_error("nonfinite benchmark output");
+            profile_output_hash=fnv1a64(reinterpret_cast<const uint8_t*>(pixels),output_size);
             benchmark_log << std::setprecision(12) << "{\"frame\":" << frame_index
                 << ",\"context_gpu_ms\":" << ms(whole[0],whole[1])
                 << ",\"record_cpu_ms\":" << record_cpu_ms
                 << ",\"output_fnv1a64\":\"" << std::hex
-                << fnv1a64(reinterpret_cast<const uint8_t*>(pixels),output_size) << std::dec << "\",\"passes\":{";
+                << profile_output_hash << std::dec << "\",\"passes\":{";
             for(unsigned i=0;i<pass_count;++i) {
                 if(i) benchmark_log << ',';
                 benchmark_log << '\"' << (i==0 ? "auto_exposure" : i>=29 ? (i==29 ? "ni_wait" : i==30 ? "ni_pack" : "ni_unpack") : i>=28 ? "post_k2" : is411 ? fsr4::k411PassNames[i-1] : kPasses[i-1].name)
                               << "\":" << ms(times[i*2],times[i*2+1]);
             }
+            if (lite_queries) benchmark_log << "\"k2\":" << k2_ms;
             benchmark_log << "}}\n";
             if(!benchmark_log) throw std::runtime_error("cannot write timing report");
 #else
@@ -1380,10 +1411,11 @@ int main(int argc, char** argv) {
             const auto* pixels=cached_pixels.data();
             for(size_t i=0;i<output_size/2;++i)
                 if((pixels[i]&0x7c00)==0x7c00) throw std::runtime_error("nonfinite benchmark output");
+            profile_output_hash=fnv1a64(reinterpret_cast<const uint8_t*>(pixels),output_size);
             benchmark_log << std::setprecision(12) << "{\"frame\":" << frame_index
                 << ",\"context_gpu_ms\":" << gpu_ms << ",\"record_cpu_ms\":" << record_cpu_ms
                 << ",\"output_fnv1a64\":\"" << std::hex
-                << fnv1a64(reinterpret_cast<const uint8_t*>(pixels),output_size) << std::dec << "\"}\n";
+                << profile_output_hash << std::dec << "\"}\n";
             if(!benchmark_log) throw std::runtime_error("cannot write DLL timing report");
 #endif
         };
@@ -1610,7 +1642,7 @@ int main(int argc, char** argv) {
                 check(vkQueueWaitIdle(queue), "vkQueueWaitIdle(reuse)");
                 collect_profile(frame_index);
                 if (benchmark_frames) { const size_t nb=size_t(kOutputWidth)*kOutputHeight*8;
-                    std::cout << "NIHASH " << frame_index << ' ' << std::hex << fnv1a64(reinterpret_cast<const uint8_t*>(readback.mapped),nb) << std::dec << std::endl;
+                    std::cout << "NIHASH " << frame_index << ' ' << std::hex << profile_output_hash << std::dec << std::endl;
                     static const int de=std::getenv("NI_DUMP_EVERY") ? std::atoi(std::getenv("NI_DUMP_EVERY")) : 0;
                     if (de>0 && frame_index%de==0) { std::ofstream df(output_path.string()+".f"+std::to_string(frame_index),std::ios::binary);
                         df.write(reinterpret_cast<const char*>(readback.mapped),nb); } }
@@ -1706,6 +1738,7 @@ int main(int argc, char** argv) {
         for (auto& buffer : buffers) destroy_buffer(device, buffer);
         if (command_pool) vkDestroyCommandPool(device, command_pool, nullptr);
         if (benchmark_queries) vkDestroyQueryPool(device,benchmark_queries,nullptr);
+        if (lite_queries) vkDestroyQueryPool(device,lite_queries,nullptr);
         if (device) vkDestroyDevice(device, nullptr);
         if (instance) vkDestroyInstance(instance, nullptr);
         return 1;
@@ -1722,6 +1755,7 @@ int main(int argc, char** argv) {
     for (auto& buffer : buffers) destroy_buffer(device, buffer);
     vkDestroyCommandPool(device, command_pool, nullptr);
     if (benchmark_queries) vkDestroyQueryPool(device,benchmark_queries,nullptr);
+    if (lite_queries) vkDestroyQueryPool(device,lite_queries,nullptr);
     vkDestroyDevice(device, nullptr);
     vkDestroyInstance(instance, nullptr);
     return 0;
