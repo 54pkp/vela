@@ -25,6 +25,7 @@ included). Checksums of the patch files: `patches.md5`.
 | 0024 | looks for the depth buffer under another NGX parameter name before giving up; `OPTI_VELA_NODEPTH=1` forces the no-depth path (tests) |
 | 0024b–0024d | a context without depth gets FSR 1 (EASU) of the colour, without history, inside a reversible tonemap that compiles under vkd3d-shader (stopgap, see the 0.8.22 known issues) |
 | 0025 | passes native 24-bit depth to providers that support sampling it, with the existing fallback otherwise |
+| 0026 | passes RGBA8 UNORM colour and output images to the Vela Vulkan provider, as used by Judgment in SDR |
 
 ## Build
 
@@ -48,7 +49,7 @@ Pinned inputs:
 
 ### Reproducing the release DLL
 
-Use the original v0.8.22 source for the release checksum below. The build in this branch also applies patch 0025.
+Use the original v0.8.22 source for the release checksum below. The fork build also applies patches 0025 and 0026.
 
 The `OptiScaler.dll` of Vela 0.8.22 (md5 `cc76b47269c20214a665c4a618d8a4ff`) is this build with
 

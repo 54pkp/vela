@@ -1,0 +1,39 @@
+diff --git a/OptiScaler/upscalers/sgsr3/Fsr4VkBridge.h b/OptiScaler/upscalers/sgsr3/Fsr4VkBridge.h
+--- a/OptiScaler/upscalers/sgsr3/Fsr4VkBridge.h
++++ b/OptiScaler/upscalers/sgsr3/Fsr4VkBridge.h
+@@ -295,6 +295,7 @@
+ enum Fmt : uint32_t
+ {
+     RGBA16F = 4,
++    RGBA8Unorm = 10,
+     R11G11B10F = 16,
+     RG16F = 18,
+     R32F = 28,
+@@ -504,6 +505,18 @@
+         Img in[3], out;
+         if (!Get(color, in[0], false) || !Get(dep, in[1], true) || !Get(mv, in[2], false) || !Get(output, out, false))
+             return false;
++        if (in[0].fmt == VK_FORMAT_R8G8B8A8_UNORM)
++        {
++            const auto desc = color.res->GetDesc();
++            if ((desc.Flags & D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE) || desc.SampleDesc.Count != 1)
++                return Unsupported("colour", in[0].fmt);
++        }
++        if (out.fmt == VK_FORMAT_R8G8B8A8_UNORM)
++        {
++            const auto desc = output.res->GetDesc();
++            if (!(desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) || desc.SampleDesc.Count != 1)
++                return Unsupported("output", out.fmt);
++        }
+         const auto d24 = Fsr4Vk::D24Capability(in[1].fmt);
+         if (d24)
+         {
+@@ -693,6 +706,8 @@
+         {
+         case VK_FORMAT_R16G16B16A16_SFLOAT:
+             return Fsr4Vk::RGBA16F;
++        case VK_FORMAT_R8G8B8A8_UNORM:
++            return Fsr4Vk::RGBA8Unorm;
+         case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
+             return Fsr4Vk::R11G11B10F;
+         case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:

@@ -89,6 +89,7 @@ struct ProviderContext {
     VkDevice device = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     std::uint32_t nativeDepthFormats = 0;
+    VkFormatFeatureFlags rgba8Features = 0;
     PFN_vkGetDeviceProcAddr getDeviceProcAddr = nullptr;
     std::uint32_t apiVersion = VK_API_VERSION_1_1;
     std::optional<bool> robust_buffer_access, native_mixed_dot_enabled;
@@ -504,6 +505,9 @@ static ffxReturnCode_t createContextImpl(
         if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)
             provider->nativeDepthFormats |= fsr4vk::d24_capability(format);
     }
+    VkFormatProperties rgba8Properties{};
+    vkGetPhysicalDeviceFormatProperties(provider->physicalDevice, VK_FORMAT_R8G8B8A8_UNORM, &rgba8Properties);
+    provider->rgba8Features = rgba8Properties.optimalTilingFeatures;
     provider->getDeviceProcAddr = backend->getDeviceProcAddr;
     provider->apiVersion = findVulkanApiVersion(header);
     for(auto* node=header;node;node=node->pNext) if(node->type==FSR4VK_CREATE_DESC_TYPE_DEVICE_FEATURES) {
@@ -763,6 +767,15 @@ static ffxReturnCode_t dispatchImpl(
            ow>provider->maxUpscaleSize.width || oh>provider->maxUpscaleSize.height)
             throw std::invalid_argument("dispatch dimensions exceed context capacity");
         stage="resource validation";
+        const bool rgba8_color=d.color.description.format==FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
+        const bool rgba8_output=d.output.description.format==FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
+        constexpr auto required_sampling=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        if(rgba8_color && (provider->rgba8Features&required_sampling)!=required_sampling)
+            throw std::invalid_argument("RGBA8_UNORM colour requires sampled image and linear filtering support");
+        if(rgba8_output && (!(provider->rgba8Features&VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) ||
+                            !(d.output.description.usage&FFX_API_RESOURCE_USAGE_UAV)))
+            throw std::invalid_argument("RGBA8_UNORM output requires a storage image with UAV usage");
         const bool packed_color=d.color.description.format==FFX_API_SURFACE_FORMAT_R11G11B10_FLOAT;
         const bool shared_exponent_color=
             d.color.description.format==FFX_API_SURFACE_FORMAT_R9G9B9E5_SHAREDEXP;
@@ -784,12 +797,14 @@ static ffxReturnCode_t dispatchImpl(
         }
         if(!native_depth_supplied && depth_usage!=FFX_API_RESOURCE_USAGE_STENCILTARGET)
             depth_format=fsr4vk::depth_view_format(depth_usage);
-        const auto color_format=shared_exponent_color ? FFX_API_SURFACE_FORMAT_R9G9B9E5_SHAREDEXP :
-            (packed_color ? FFX_API_SURFACE_FORMAT_R11G11B10_FLOAT : FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT);
-        const auto color_vk_format=shared_exponent_color ? VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 :
-            (packed_color ? VK_FORMAT_B10G11R11_UFLOAT_PACK32 : VK_FORMAT_R16G16B16A16_SFLOAT);
+        const auto color_format=rgba8_color ? FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM :
+            shared_exponent_color ? FFX_API_SURFACE_FORMAT_R9G9B9E5_SHAREDEXP :
+            packed_color ? FFX_API_SURFACE_FORMAT_R11G11B10_FLOAT : FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT;
+        const auto color_vk_format=rgba8_color ? VK_FORMAT_R8G8B8A8_UNORM :
+            shared_exponent_color ? VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 :
+            packed_color ? VK_FORMAT_B10G11R11_UFLOAT_PACK32 : VK_FORMAT_R16G16B16A16_SFLOAT;
         const auto color = resource("color",d.color,rw,rh,color_format,color_vk_format,
-            FFX_API_RESOURCE_STATE_COMPUTE_READ,"R16G16B16A16_FLOAT, R11G11B10_FLOAT, R9G9B9E5_SHAREDEXP");
+            FFX_API_RESOURCE_STATE_COMPUTE_READ,"R16G16B16A16_FLOAT, R11G11B10_FLOAT, R9G9B9E5_SHAREDEXP, R8G8B8A8_UNORM");
         const auto depth = resource("depth",d.depth,rw,rh,FFX_API_SURFACE_FORMAT_R32_FLOAT,
             depth_format,FFX_API_RESOURCE_STATE_COMPUTE_READ,
             "R32_FLOAT (R32_SFLOAT color, D32_SFLOAT, D32_SFLOAT_S8_UINT, or D24 with matching native format metadata)",
@@ -828,8 +843,12 @@ static ffxReturnCode_t dispatchImpl(
         const auto exposure = (provider->flags & FFX_UPSCALE_ENABLE_AUTO_EXPOSURE) ? fsr4core::Image{} : resource("exposure",d.exposure,1,1,
             half_exposure ? FFX_API_SURFACE_FORMAT_R16_FLOAT : FFX_API_SURFACE_FORMAT_R32_FLOAT,
             half_exposure ? VK_FORMAT_R16_SFLOAT : VK_FORMAT_R32_SFLOAT,FFX_API_RESOURCE_STATE_COMPUTE_READ,"R16_FLOAT, R32_FLOAT");
-        const auto output = resource("output",d.output,gow,goh,packed_output ? FFX_API_SURFACE_FORMAT_R11G11B10_FLOAT : FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT,
-            packed_output ? VK_FORMAT_B10G11R11_UFLOAT_PACK32 : VK_FORMAT_R16G16B16A16_SFLOAT,FFX_API_RESOURCE_STATE_UNORDERED_ACCESS,"R16G16B16A16_FLOAT, R11G11B10_FLOAT");
+        const auto output_format=rgba8_output ? FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM :
+            packed_output ? FFX_API_SURFACE_FORMAT_R11G11B10_FLOAT : FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT;
+        const auto output_vk_format=rgba8_output ? VK_FORMAT_R8G8B8A8_UNORM :
+            packed_output ? VK_FORMAT_B10G11R11_UFLOAT_PACK32 : VK_FORMAT_R16G16B16A16_SFLOAT;
+        const auto output = resource("output",d.output,gow,goh,output_format,output_vk_format,
+            FFX_API_RESOURCE_STATE_UNORDERED_ACCESS,"R16G16B16A16_FLOAT, R11G11B10_FLOAT, R8G8B8A8_UNORM");
         if(!resource_errors.empty()) throw std::invalid_argument(resource_errors);
         if(provider->first_dispatch && !provider->diagnostic_path.empty())
             diagnostic(*provider,"resolved input views: depth VkFormat="+std::to_string(depth.format)+

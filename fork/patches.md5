@@ -24,3 +24,4 @@ b3654ff68ec1fc1d16b436c3a6b45f3b *0021-vela-output-pack-rgb9e5.patch
 e2efed6b09574cdf97bf8cf185e1a38b *0024c-vela-nodepth-tonemap.patch
 8be4cefba5ce987cc161d53c48f73d44 *0024d-vela-tonemap-vkd3d.patch
 6eeb4348a4b4dbb4a4baa847365d9400 *0025-vela-native-d24-depth.patch
+ad6b296c52d8adea034a973f93584d43 *0026-vela-rgba8-fsr4-color.patch
