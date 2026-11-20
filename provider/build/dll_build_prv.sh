@@ -20,7 +20,7 @@ cp -r /src /work-fsr4vk
 [ -d /work-fsr4vk/.git ] || (cd /work-fsr4vk && git init -q && git add -A && git -c user.name=build -c user.email=build@localhost commit -qm "fsr4vk 391f62b without assets")
 cp /ov/quality-context.hpp /ov/vela-baked-pre.hpp /ov/fsr411-recorder.hpp /ov/fv_npu.hpp /ov/fv_spv.hpp /ov/vela-fast-spv.hpp /work-fsr4vk/native/
 cp /ov/fsr411-assets.py /work-fsr4vk/tools/fsr411-assets.py
-cp /ov2/depth-input.hpp /ov2/fsr412lite-blobs.hpp /ov2/fsr412lite-context.hpp /ov2/vela_npu_abi.h /ov2/vela_npu_ext.h /gen/fsr412lite-npu-spv.hpp /gen/fsr4fu-spv.hpp /gen/fsr4sr4-spv.hpp /work-fsr4vk/native/
+cp /ov2/depth-input.hpp /ov2/fsr412lite-blobs.hpp /ov2/fsr412lite-k2-shared-taps.hpp /ov2/fsr412lite-context.hpp /ov2/vela_npu_abi.h /ov2/vela_npu_ext.h /gen/fsr412lite-npu-spv.hpp /gen/fsr4fu-spv.hpp /gen/fsr4sr4-spv.hpp /work-fsr4vk/native/
 cp /ov2/provider/ffx_vk_provider.cpp /work-fsr4vk/provider/ffx_vk_provider.cpp
 cd /work-fsr4vk
 find . -path ./.git -prune -o -type f \( -name "*.sh" -o -name "*.py" \) -print0 | xargs -0 sed -i 's/\r$//'

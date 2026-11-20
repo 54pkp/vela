@@ -50,3 +50,27 @@ normalizes forward-Z inputs where required by FSR 4.
 4. Optional checks of the generated kernels: `sh sr4-kernels/build.sh`, `sh spirv-sources/build.sh` and `sh spirv-sources/build_amd.sh` (each rebuilds its headers and compares them with `overlay/gen`, `overlay/ov` and `overlay/ov2`).
 5. Compile and run [the CPU depth format test](build/depth-input-test.cpp) with a C++20 compiler and Vulkan headers.
    The test requires no Vulkan loader.
+
+## FSR 4.1.2 Lite K2 performance experiment
+
+This branch adapts the [color-tap reuse idea from FSR 4.1.2 Performance Overrides](https://github.com/zgauthier2000/fsr4-shader-performance-overrides/blob/6bb1ffe089705511ccc716991928754a21e0470d/docs/how-it-works.md) to Vela's native Vulkan Lite postpass. Vela's K2 already shares taps horizontally. The experiment also reuses the converted taps vertically when the rounded lower-row center is at the same X and advances by zero or one texel in Y. This reduces the two windows from 24 fetch-and-convert operations per invocation to 12 or 16 on the reuse path. Other coordinates use the original fetches. The experiment keeps the network weights and descriptor layout and uses no additional workgroup memory. The existing SR4 skipped-frame shader remains in its own pipeline.
+
+Rebuild the provider with the [experimental SPIR-V header](spirv-sources/README.md#experimental-k2-color-tap-sharing). Select FSR 4.1.2 Lite and prepend `VELA_FSR412_K2_SHARED_TAPS=1` to that game's existing Steam launch options. The default and `0` select the stock shader. A rejected experimental pipeline falls back to the stock shader. The provider's diagnostic line reports `k2_shared_taps=1` only after the experimental pipeline was created.
+
+For an isolated GPU comparison, use the provider-linked `dispatch-smoke` bench. Point `FSR4_VK_ASSET_ROOT` to the sidecar root if needed. Lite has embedded kernels and only requires the directory `fsr411/general` to satisfy the existing asset-root check in a non-embedded bench. Use distinct output paths for the two runs. The JSONL report contains a hash of each frame and GPU time for the whole Lite context.
+
+```bash
+export FSR4_TEST_VERSION=4.1.2 FSR4_TEST_RENDER_SIZE=960x540 FSR4_TEST_OUTPUT_SIZE=1920x1080
+export CP_VELA_DESC=0 FSR4_TEST_PROFILE_FRAMES=12
+VELA_FSR412_K2_SHARED_TAPS=0 ./dispatch-smoke unused unused unused stock.rgba16f --provider-temporal
+VELA_FSR412_K2_SHARED_TAPS=1 ./dispatch-smoke unused unused unused shared.rgba16f --provider-temporal
+```
+
+On Windows with an RTX 4060 and Vulkan 1.3, all 12 RGBA16F frame hashes matched in each of the two render-size comparisons. The first and last frame files also matched byte for byte. Timings below are short-run medians of the full GPU context, after dropping two frames from each run.
+
+| Render → output | Stock | Shared taps |
+| --- | ---: | ---: |
+| 960×540 → 1920×1080 | 1.247 ms | 1.245 ms |
+| 1280×720 → 1920×1080 | 1.281 ms | 1.359 ms |
+
+The newer glslang 16.6/SPIRV-Tools 2026.4 build diverged from the stock output in the temporal test. The checked-in variant uses the tool versions that reproduce the stock shader. No speedup was established in the Windows runs. The experiment stays opt-in pending Adreno 830 measurements. NPU, in-game FPS, GPU load and the packaged provider build are outside these bench results.

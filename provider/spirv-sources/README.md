@@ -11,6 +11,7 @@ the build steps of all of them except the SR4 kernels, which have their own fold
 | `overlay/ov/vela-fast-spv.hpp` | FSR 4 Fast prepass and K2 variants, fused 1.5x K2, separate 1.5x passes | `fast/*.comp`, `fast/*.spvasm` | `build_amd.sh` |
 | `overlay/gen/fsr4fu-spv.hpp` | fused prepass + K1 kernels and the select kernel of the Lite NPU path | `fused/npu_select.comp`, `lite/pre_lds.comp`, `lite/b1_0009.comp`, generator `tools/gen_fu.py` | `build_amd.sh` |
 | `overlay/ov2/fsr412lite-blobs.hpp` | the FSR 4.1.2 Lite passes (SPIR-V), the Lite weights and the pass table | AMD DLL (fetched), `lite/`, `tools/` | `build_amd.sh` |
+| `overlay/ov2/fsr412lite-k2-shared-taps.hpp` | optional Lite K2 shader with vertical color-tap reuse | `lite/k2cl.comp`, `lite/share_k2_taps.py` | `build_k2_shared_taps.sh` |
 
 ## Licences of the sources
 - `fv/`, `npu/`, `fused/npu_select.comp`, `tools/`, `amd/*.sh`, `amd/*.py`: ours, GPL-3.0.
@@ -46,6 +47,17 @@ and compares them with the copies in `../overlay`. The last lines of `out/build.
 6. `tools/gen_amd_hpp.py` writes the three headers; the script compares them with the copies in `../overlay`.
 
 The last lines of `out/build_amd.log` must read `IDENTICAL` three times.
+
+### Experimental K2 color-tap sharing
+
+Run the following from this folder with glslang 15.1.0, SPIRV-Tools 2025.1 and Python 3 available to Bash. These shader tool versions reproduce the stock 0013 module byte for byte when compiling `lite/k2cl.comp` through `tools/p.sh`.
+
+```bash
+bash build_k2_shared_taps.sh
+cmp out/fsr412lite-k2-shared-taps.hpp ../overlay/ov2/fsr412lite-k2-shared-taps.hpp
+```
+
+The builder uses the same shader entry, optimization steps and Lite weights as the stock K2 build. It validates the resulting SPIR-V with `spirv-val --target-env vulkan1.3` before embedding it.
 
 ### What the sources are
 - `fast/*.comp` and `lite/*.comp` are the GLSL that was compiled; they are the form in which the kernels are modified. They started as decompilations

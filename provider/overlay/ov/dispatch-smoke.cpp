@@ -444,6 +444,10 @@ int main(int argc, char** argv) {
     const bool nms_inputs = temporal_test || game_formats || (argc == 6 && std::string(argv[5]) == "--provider-nms");
     const bool use_provider = nms_inputs || (argc == 6 && std::string(argv[5]) == "--provider");
     const bool use_context = use_provider || (argc == 6 && std::string(argv[5]) == "--context");
+    const char* version_env = std::getenv("FSR4_TEST_VERSION");
+    const std::string version = version_env ? version_env : "";
+    const bool test_lite = version == "4.1.2";
+    if (test_lite && !use_provider) return 2;
     const bool external_exposure_test = std::getenv("FSR4_TEST_EXTERNAL_EXPOSURE") != nullptr;
     const bool half_exposure_test = std::getenv("FSR4_TEST_R16_EXPOSURE") != nullptr;
     const bool depth_only_test=std::getenv("FSR4_TEST_DEPTH_ONLY")!=nullptr;
@@ -507,7 +511,7 @@ int main(int argc, char** argv) {
             benchmark_frames < 2 || benchmark_frames > 240) return 2;  // 240-frame run
 #if !defined(FSR4_EXTERNAL_PROVIDER)
         const char* profile = std::getenv("FSR4_VK_PROFILE_PATH");
-        if (!profile || !*profile) return 2;
+        if (!test_lite && (!profile || !*profile)) return 2;
 #endif
     }
 #if defined(FSR4_EXTERNAL_PROVIDER)
@@ -721,7 +725,7 @@ int main(int argc, char** argv) {
 
         modules.reserve(kPasses.size());
         pipelines.reserve(kPasses.size());
-        for (const auto& pass : kPasses) {
+        if (!test_lite) for (const auto& pass : kPasses) {
             // NMS bundles contain their captured pre permutation, not the
             // unrelated external-exposure pre shader used by baseline mode.
             const char* hash = nms_inputs && std::string(pass.name) == "pre"
@@ -837,14 +841,14 @@ int main(int argc, char** argv) {
                 VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true));
         Buffer& scratch = buffers.back();
-        const auto initializer_bytes = read_bytes(initializer_path);
+        const auto initializer_bytes = test_lite ? std::vector<std::uint8_t>(4) : read_bytes(initializer_path);
         buffers.push_back(create_buffer(
             physical_device, device, initializer_bytes.size(),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true));
         Buffer& initializer = buffers.back();
         std::memcpy(initializer.mapped, initializer_bytes.data(), initializer_bytes.size());
-        const auto weights_bytes = read_bytes(weights_path);
+        const auto weights_bytes = test_lite ? std::vector<std::uint8_t>(1024) : read_bytes(weights_path);
         if (weights_bytes.size() != 1024) throw std::runtime_error("weights must be 1024 bytes");
         buffers.push_back(create_buffer(
             physical_device, device, kPhysicalConstantBackingSize,
@@ -1333,14 +1337,16 @@ int main(int argc, char** argv) {
             if (!benchmark_queries) return;
 #if !defined(FSR4_EXTERNAL_PROVIDER)
             const auto* provider = reinterpret_cast<const ProviderContext*>(api_context);
-            if (!provider || provider->cores.size()!=1 || !tracked_pass_queries)
+            if (!provider || (!test_lite && (provider->cores.size()!=1 || !tracked_pass_queries)))
                 throw std::runtime_error("unexpected benchmark core/query count");
             std::array<uint64_t,2> whole{};
             std::array<uint64_t,64> times{};
-            const bool is411=provider->version==kVersion411Id; const auto pass_count=is411 ? (std::getenv("FSR4_X_SPLIT") ? 32u : 28u) : 15u;
+            const bool is411=provider->version==kVersion411Id;
+            const auto pass_count=test_lite ? 0u : is411 ? (std::getenv("FSR4_X_SPLIT") ? 32u : 28u) : 15u;
             check(vkGetQueryPoolResults(device,benchmark_queries,0,2,sizeof(whole),whole.data(),sizeof(uint64_t),VK_QUERY_RESULT_64_BIT),"context timestamps");
-            check(vkGetQueryPoolResults(device,tracked_pass_queries,provider->active_core->last_profile_query_base(),
-                pass_count*2,sizeof(times),times.data(),sizeof(uint64_t),VK_QUERY_RESULT_64_BIT),"pass timestamps");
+            if (pass_count)
+                check(vkGetQueryPoolResults(device,tracked_pass_queries,provider->active_core->last_profile_query_base(),
+                    pass_count*2,sizeof(times),times.data(),sizeof(uint64_t),VK_QUERY_RESULT_64_BIT),"pass timestamps");
             const uint64_t mask=timestamp_bits>=64 ? ~uint64_t(0) : (uint64_t(1)<<timestamp_bits)-1;
             const auto ms=[&](uint64_t a,uint64_t b) {return double((b-a)&mask)*physical_properties.limits.timestampPeriod/1e6;};
             std::vector<uint16_t> cached_pixels(output_size/2);
@@ -1390,11 +1396,11 @@ int main(int argc, char** argv) {
                 backend.header.pNext=&feature_snapshot.header;
                 ffxOverrideVersion model_version{};
                 model_version.header.type=FFX_API_DESC_TYPE_OVERRIDE_VERSION;
-                if (const char* version=std::getenv("FSR4_TEST_VERSION")) {
-                    if(std::string(version)!="4.1.1" && std::string(version)!="4.0.2")
-                        throw std::invalid_argument("FSR4_TEST_VERSION must be 4.0.2 or 4.1.1");
+                if (version_env) {
+                    if(version!="4.1.1" && version!="4.0.2" && !test_lite)
+                        throw std::invalid_argument("FSR4_TEST_VERSION must be 4.0.2, 4.1.1 or 4.1.2");
                     model_version.versionId=(0xF5A5CA1Eull<<32) | (4ull<<22) |
-                        (std::string(version)=="4.1.1" ? (1ull<<12)|1ull : 2ull);
+                        (version=="4.1.1" ? (1ull<<12)|1ull : test_lite ? (1ull<<12)|2ull : 2ull);
                     model_version.header.pNext=&feature_snapshot.header;
                     backend.header.pNext=&model_version.header;
                 }
@@ -1421,6 +1427,10 @@ int main(int argc, char** argv) {
                 if(ffxQuery(&api_context,&selected.header)!=FFX_API_RETURN_OK || selected.versionId!=expected)
                     throw std::runtime_error("provider selected the wrong model version");
                 std::cout << "selected_provider=" << selected.versionName << '\n';
+#if !defined(FSR4_EXTERNAL_PROVIDER)
+                if (test_lite)
+                    std::cout << "k2_shared_taps=" << reinterpret_cast<const ProviderContext*>(api_context)->lite->k2_shared_taps() << '\n';
+#endif
             } else {
                 context = std::make_unique<fsr4core::QualityContext>(
                     physical_device, device, shader_dir, initializer_path,
@@ -1440,8 +1450,9 @@ int main(int argc, char** argv) {
                 VK_NULL_HANDLE, 0, kOutputWidth, kOutputHeight,
                 command_pipeline_barrier2, promoted_dispatch.cmd_write_timestamp2);
         }
-        std::cout << "dispatch=quality-frame passes=" << (std::getenv("FSR4_TEST_VERSION") && std::string(std::getenv("FSR4_TEST_VERSION"))=="4.1.1" ? 28 : kPasses.size() + (nms_inputs ? 1 : 0))
-                  << " status=recorded\n";
+        if (test_lite) std::cout << "dispatch=lite-frame status=recorded\n";
+        else std::cout << "dispatch=quality-frame passes=" << (version=="4.1.1" ? 28 : kPasses.size() + (nms_inputs ? 1 : 0))
+                       << " status=recorded\n";
 
         const std::array<const Image*, 3> inspected_images{{
             &output, &history, &reprojected}};

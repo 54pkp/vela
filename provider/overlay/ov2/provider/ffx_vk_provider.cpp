@@ -564,7 +564,7 @@ static ffxReturnCode_t createContextImpl(
             diagnostic(*provider,"FSR 4.1.2 Lite ready: render="+std::to_string(provider->lite->render_width())+"x"+std::to_string(provider->lite->render_height())+" npu="+std::to_string(provider->lite->npu_mode())+" network_every="+std::to_string(provider->lite->network_every())+
                 " subgroup32="+std::to_string(provider->lite->subgroup32())+" subgroup="+std::to_string(provider->lite->subgroup_min())+".."+
                 std::to_string(provider->lite->subgroup_max())+" owned_bytes="+std::to_string(provider->lite->owned_bytes())+
-                " kernels "+fsr4lite::kKernelMd5);
+                " k2_shared_taps="+std::to_string(provider->lite->k2_shared_taps())+" kernels "+fsr4lite::kKernelMd5);
         }
         diagnostic(*provider,"diagnostics_schema=2 provider_build=" __DATE__ " " __TIME__);
         provider->motion_override=fsr4vk::motion_format_override(std::getenv("FSR4_VK_MOTION_FORMAT"));

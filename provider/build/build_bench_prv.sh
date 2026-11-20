@@ -19,7 +19,7 @@ git -c advice.detachedHead=false clone -q --depth 1 --branch v1.4.367 https://gi
 cp -r /src /w && cd /w
 cp /ov/* /w/native/
 # the bench takes the DLL's provider (overlay/ov2 + the Vela Lite files), so the create-time NPU gate is the one the game runs
-cp /ov2/depth-input.hpp /ov2/fsr412lite-blobs.hpp /ov2/fsr412lite-context.hpp /ov2/vela_npu_abi.h /ov2/vela_npu_ext.h /gen/fsr412lite-npu-spv.hpp /gen/fsr4fu-spv.hpp /gen/fsr4sr4-spv.hpp /w/native/; cp /ov2/provider/ffx_vk_provider.cpp /w/provider/ffx_vk_provider.cpp
+cp /ov2/depth-input.hpp /ov2/fsr412lite-blobs.hpp /ov2/fsr412lite-k2-shared-taps.hpp /ov2/fsr412lite-context.hpp /ov2/vela_npu_abi.h /ov2/vela_npu_ext.h /gen/fsr412lite-npu-spv.hpp /gen/fsr4fu-spv.hpp /gen/fsr4sr4-spv.hpp /w/native/; cp /ov2/provider/ffx_vk_provider.cpp /w/provider/ffx_vk_provider.cpp
 
 aarch64-linux-gnu-g++ -std=c++20 -O2 -static-libstdc++ -static-libgcc -I/tmp/vkh/include \
     -Iamd-fidelityfx-sdk/Kits/FidelityFX/api/include native/dispatch-smoke.cpp \

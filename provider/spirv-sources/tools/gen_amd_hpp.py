@@ -2,7 +2,8 @@
 """Write the three AMD-derived SPIR-V headers of the provider from built SPIR-V modules.
 usage: gen_amd_hpp.py fast  <out.hpp> <dir with the Fast modules (<name>.spv)>
        gen_amd_hpp.py fu    <out.hpp> <dir with fu_pre, fu_k1, fu_k1s, fu_k1d, npu_select_fu .spv>
-       gen_amd_hpp.py lite  <out.hpp> <dir with 0000..0010, 0013, pre_r2c .spv> <lite_weights.bin> <pass_table.inc>"""
+       gen_amd_hpp.py lite  <out.hpp> <dir with 0000..0010, 0013, pre_r2c .spv> <lite_weights.bin> <pass_table.inc>
+       gen_amd_hpp.py lite-k2-taps <out.hpp> <experimental K2 SPIR-V>"""
 import struct, sys
 from pathlib import Path
 
@@ -68,11 +69,27 @@ def lite(out, d, weights, table):
     write(out, '\n'.join(o) + '\n' + table.read_text())
 
 
+def lite_k2_taps(out, module):
+    blob = module.read_bytes()
+    data = words(blob)
+    lines = [
+        '// Generated from the AMD-derived Lite K2 shader; see ../../spirv-sources/README.md.',
+        '#pragma once', '#include <cstdint>', 'namespace fsr4lite {',
+        '// K2 shared taps, %d bytes, FNV-1a64 %016x' % (len(blob), fnv(blob)),
+        'inline constexpr std::uint32_t kSpv13SharedTaps[] = {',
+    ]
+    for i in range(0, len(data), 16):
+        lines.append(','.join('0x%x' % word for word in data[i:i + 16]) + ',')
+    write(out, '\n'.join(lines + ['};', '}']) + '\n')
+
+
 if __name__ == '__main__':
     mode, out = sys.argv[1], Path(sys.argv[2])
     if mode == 'fast':
         fast(out, Path(sys.argv[3]))
     elif mode == 'fu':
         fu(out, Path(sys.argv[3]))
+    elif mode == 'lite-k2-taps':
+        lite_k2_taps(out, Path(sys.argv[3]))
     else:
         lite(out, Path(sys.argv[3]), Path(sys.argv[4]), Path(sys.argv[5]))

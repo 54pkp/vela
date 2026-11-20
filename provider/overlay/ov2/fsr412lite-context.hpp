@@ -17,6 +17,7 @@
 // 640x360 (ratio 3.0, width <= 641) is another AMD model (4 modules + weights differ): rejected, the host falls back.
 #include "depth-input.hpp"
 #include "fsr412lite-blobs.hpp"
+#include "fsr412lite-k2-shared-taps.hpp"
 #include "vela_npu_abi.h"
 #include "vela_npu_ext.h"
 #include "fsr412lite-npu-spv.hpp"
@@ -84,6 +85,7 @@ public:
     LiteContext& operator=(const LiteContext&) = delete;
     ~LiteContext() { release(); }
     std::uint32_t network_every() const { return every; }
+    bool k2_shared_taps() const { return shared_taps; }
     bool subgroup32() const { return sg32; }
     std::uint32_t subgroup_min() const { return min_subgroup; }
     std::uint32_t subgroup_max() const { return max_subgroup; }
@@ -213,6 +215,7 @@ private:
     std::array<VkPipelineLayout, kPasses> layouts{};
     std::array<VkPipeline, kPasses> pipelines{};
     VkPipeline k2 = VK_NULL_HANDLE, pre_skip = VK_NULL_HANDLE;
+    bool shared_taps = false;
     // SR4 skipped frames: [0] = R (sr_r4), [1] = W (sr_w); per-slot sets; sr_h = history read next (1 = kXHist), sr_cp = feature plane
     bool sr = false; std::uint32_t sr_h = 0, sr_cp = 0;
     VkDescriptorSetLayout sr_set_layout[2] = {}; VkPipelineLayout sr_layout[2] = {}; VkPipeline sr_pipe[2] = {}; VkDescriptorPool sr_pool = VK_NULL_HANDLE;
@@ -654,6 +657,7 @@ private:
         VkPipeline p = VK_NULL_HANDLE;
         const VkResult r = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pc, nullptr, &p);
         vkDestroyShaderModule(device, module, nullptr);
+        if (r != VK_SUCCESS && p != VK_NULL_HANDLE) vkDestroyPipeline(device, p, nullptr);
         check(r, (std::string("Lite pipeline ") + entry).c_str());
         return p;
     }
@@ -677,7 +681,18 @@ private:
             check(vkCreatePipelineLayout(device, &pl, nullptr, &layouts[i]), "Lite pipeline layout");
             pipelines[i] = make_pipeline(pass.spv, pass.spv_words, pass.entry, layouts[i]);
         }
-        k2 = make_pipeline(fsr4lite::kSpv13, sizeof(fsr4lite::kSpv13) / 4, fsr4lite::kPasses[10].entry, layouts[10]);
+        const char* k2_experiment = std::getenv("VELA_FSR412_K2_SHARED_TAPS");
+        if (k2_experiment && std::strcmp(k2_experiment, "1") == 0) {
+            try {
+                k2 = make_pipeline(fsr4lite::kSpv13SharedTaps, std::size(fsr4lite::kSpv13SharedTaps),
+                                   fsr4lite::kPasses[10].entry, layouts[10]);
+                shared_taps = true;
+            } catch (const std::runtime_error&) {
+                // Use the stock shader if the driver rejects the experimental pipeline.
+            }
+        }
+        if (k2 == VK_NULL_HANDLE)
+            k2 = make_pipeline(fsr4lite::kSpv13, std::size(fsr4lite::kSpv13), fsr4lite::kPasses[10].entry, layouts[10]);
         pre_skip = make_pipeline(fsr4lite::kSpvPreR2c, sizeof(fsr4lite::kSpvPreR2c) / 4, fsr4lite::kPasses[1].entry, layouts[1]);
         images[kHistory] = make_image(VK_FORMAT_R16G16B16A16_SFLOAT, kOutW, kOutH);
         images[kReprojected] = make_image(VK_FORMAT_R16G16B16A16_SFLOAT, kOutW, kOutH);
